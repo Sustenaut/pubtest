@@ -14,6 +14,16 @@ Feature: The result: what an action came to, checked in the same words everywher
     Then the result is "2"
     And the result is not the number 2
 
+  Scenario: A number is not a true, and a true is not a number
+    When I add 1 and 0
+    Then the result is "1"
+    And the result is not "true"
+
+  Scenario: A true is only true
+    When I check that 2 is more than 1
+    Then the result is "true"
+    And the result is not "1"
+
   Scenario: A structure is compared as JSON
     When I list the words of "b a c"
     Then the result is:

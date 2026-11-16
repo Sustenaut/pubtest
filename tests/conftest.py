@@ -22,6 +22,11 @@ def add(ctx, a, b):
     ctx.attempt(lambda: a + b)
 
 
+@when(parsers.parse("I check that {a:d} is more than {b:d}"))
+def more(ctx, a, b):
+    ctx.attempt(lambda: a > b)
+
+
 @when(parsers.parse('I give back the text "{text}"'))
 def give_back(ctx, text):
     ctx.attempt(lambda: text)

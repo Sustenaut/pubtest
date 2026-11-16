@@ -144,6 +144,7 @@ export function same(actual, wanted) {
   } catch {
     return String(actual) === wanted;
   }
+  if ((typeof actual === "boolean") !== (typeof want === "boolean")) return false; // true is not 1
   return deepEqual(actual, want);
 }
 

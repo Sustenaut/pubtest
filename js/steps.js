@@ -242,6 +242,7 @@ function showRun(r) {
 export const STEPS = [
   // The result
   ["Then", "the result is {string}", (ctx, v) => { const got = returned(ctx); check(same(got, v), () => `the result is ${show(got)}, not ${v}`); }],
+  ["Then", "the result is not {string}", (ctx, v) => { const got = returned(ctx); check(!same(got, v), () => `the result is ${v}`); }],
   ["Then", "the result is:", (ctx, doc) => {
     const got = returned(ctx);
     const table = rows(doc);

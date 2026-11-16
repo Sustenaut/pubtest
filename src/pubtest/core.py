@@ -207,6 +207,8 @@ def same(actual: Any, wanted: str) -> bool:
         want = json.loads(wanted)
     except ValueError:
         return str(actual) == wanted
+    if isinstance(actual, bool) != isinstance(want, bool):
+        return False  # true is not 1, and 0 is not false
     return actual == want
 
 

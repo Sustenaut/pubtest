@@ -123,6 +123,11 @@ def _hypothesis_runs() -> None:
 
 
 def pytest_configure(config: pytest.Config) -> None:
+    if config.pluginmanager.has_plugin("pubkit"):
+        # Until pubkit drops the plugin it carried, the two define the same
+        # fixtures and steps, and which wins is pytest's choice, not the suite's.
+        raise pytest.UsageError("pubkit's pytest plugin is loaded beside pubtest's: add -p no:pubkit to the "
+                                "suite's addopts until it moves to a pubkit without one")
     _hypothesis_runs()
     root = _features(config)
     tags: set[str] = set()

@@ -19,13 +19,13 @@ BASIC = ("sh", "bash", "env", "cat", "echo", "printf", "mkdir", "rm", "cp", "mv"
 # A stand-in that answers in turn: the first answer whose args match, of
 # those not yet given, else the last that matches.
 TURNS = '''#!{python}
-import fnmatch, json, sys
+import json, re, sys
 with open({log!r}, "a", encoding="utf-8") as log:
     log.write(json.dumps({{"name": {name!r}, "args": sys.argv[1:]}}) + "\\n")
 with open({answers!r}, encoding="utf-8") as f:
     answers = json.load(f)
 args = " ".join(sys.argv[1:])
-matching = [a for a in answers if fnmatch.fnmatchcase(args, a["args"])]
+matching = [a for a in answers if re.fullmatch(".*".join(map(re.escape, a["args"].split("*"))), args, re.S)]
 fresh = [a for a in matching if not a.get("given")]
 none = {{"exit": 127, "stdout": "", "stderr": {name!r} + ": no answer for " + args + "\\n"}}
 answer = fresh[0] if fresh else (matching[-1] if matching else none)

@@ -31,6 +31,12 @@ def result_is(ctx, wanted):
     assert same(got, wanted), f"the result is {show(got)}, not {wanted}"
 
 
+@then(parsers.parse('the result is not "{wanted}"'))
+def result_is_not(ctx, wanted):
+    got = _returned(ctx)
+    assert not same(got, wanted), f"the result is {wanted}"
+
+
 @then("the result is:")
 def result_is_docstring(ctx, docstring=None, datatable=None):
     """A docstring is the JSON (or text) the result is; a table is a list of

@@ -79,7 +79,8 @@ Quoted values are literal text. A step's value `V` is compared by one rule:
 **when the result is text, V is compared as text; otherwise V is read as JSON
 and compared as a value, and a V that does not read as JSON is compared with
 the result's text.** So `the result is "2"` holds for the text `2` and for the
-number 2, and `"true"` and `"null"` hold only for those values. The same rule
+number 2, and `"true"` and `"null"` hold only for those values: a true is
+never 1, nor 0 false. The same rule
 holds for `includes` and `the result's "K" is "V"`. A dotted key indexes maps
 by name and lists by number (`people.0.name`). A docstring (`"""`) or a table
 carries anything longer. Paths are relative to the scratch directory.
@@ -89,6 +90,7 @@ carries anything longer. Paths are relative to the scratch directory.
 | Step | Checks |
 | --- | --- |
 | `Then the result is "V"` | the result equals V |
+| `Then the result is not "V"` | the result is not V |
 | `Then the result is:` + docstring | the result equals the JSON (or the text) given |
 | `Then the result is:` + table | the result is a list of maps, one per row, the header row their keys, each cell compared as a V |
 | `Then the result includes "V"` | text contains it, a list holds it, a map has it as a key |
@@ -152,7 +154,7 @@ gcloud without reaching them.
 | `Given a stand-in "NAME" that prints "T"` | |
 | `Given a stand-in "NAME" that prints:` + docstring | |
 | `Given a stand-in "NAME" that fails, saying "T"` | exits 1 with T on stderr |
-| `Given a stand-in "NAME" that answers in turn:` + table | a row per answer: `args` (a pattern, `*` for anything), and optionally `exit`, `stdout`, `stderr`. A run takes the first matching answer not given yet, or the last matching one once all are given |
+| `Given a stand-in "NAME" that answers in turn:` + table | a row per answer: `args` (a pattern in which only `*` is special, for anything), and optionally `exit`, `stdout`, `stderr`. A run takes the first matching answer not given yet, or the last matching one once all are given |
 | `Given only stand-ins are installed` | PATH holds the stand-ins and these tools alone, so any other program is missing: sh, bash, env, cat, echo, printf, mkdir, rm, cp, mv, chmod, ls, sed, grep, head, tail, tr, cut, sort, uniq, wc, dirname, basename, mktemp, date, sleep, true, false, test, touch, readlink, realpath, id, uname |
 | `Given "NAME" is not installed` | |
 | `Then "NAME" was run with "ARGS"` | some run had exactly these arguments |

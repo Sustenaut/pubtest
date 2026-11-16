@@ -24,7 +24,7 @@ jobs:
     needs: [tested]
     if: ${{ needs.tested.outputs.tested != 'true' }}
     uses: Sustenaut/pubkit/.github/workflows/job-python-functional.yml@1718fa75ff93da1977850bdbad8dba0097abae7f # v0.41.0
-    with: {"setup": "make venv && npm ci --ignore-scripts", "test": "make functional && npm audit --package-lock-only && npm test"}
+    with: {"setup": "make venv && npm ci --ignore-scripts", "test": "make functional && npm audit --package-lock-only && npm test && shellcheck scripts/*.sh"}
 
   audit:
     name: ci

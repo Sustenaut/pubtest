@@ -30,6 +30,7 @@ export async function app(request) {
 export function suite(define) {
 
   define("When", "I add {int} and {int}", function (a, b) { return this.attempt(() => a + b); });
+  define("When", "I check that {int} is more than {int}", function (a, b) { return this.attempt(() => a > b); });
   define("When", "I give back the text {string}", function (t) { return this.attempt(() => t); });
   define("Then", "the result is not the number 2", function () {
     if (this.pubtest.result !== "2") throw new Error(`the result is ${this.pubtest.result}`);

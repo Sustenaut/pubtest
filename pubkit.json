@@ -4,7 +4,7 @@
     "language": "python",
     "with": {
       "setup": "make venv && npm ci --ignore-scripts",
-      "test": "make functional && npm audit --package-lock-only && npm test"
+      "test": "make functional && npm audit --package-lock-only && npm test && shellcheck scripts/*.sh"
     },
     "release": {}
   },
