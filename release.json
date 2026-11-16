@@ -1,0 +1,19 @@
+{
+  "name": "pubtest",
+  "package": "pkg.pubtest",
+  "tag": "PKG-PUBTST-11-2026",
+  "corpus": "corpus",
+  "manifest": {
+    "kind": "pyproject",
+    "path": "pyproject.toml"
+  },
+  "code": [
+    "src/",
+    "pyproject.toml",
+    "js/",
+    "package.json",
+    "GRAMMAR.md"
+  ],
+  "install": "pip install https://github.com/Sustenaut/pubtest/releases/download/{tag}/pubtest-{version}-py3-none-any.whl, or npm install --save-dev github:Sustenaut/pubtest#{tag}",
+  "key": "pub:sha2-256:mdj4lu3svqd5erkml4vnwa45hnvmxfkof43ojl3d4cfacfxx5qkq"
+}

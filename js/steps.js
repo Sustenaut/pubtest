@@ -1,0 +1,472 @@
+// pubtest's steps for Node (GRAMMAR.md): register(api) defines them with a
+// runner's Given/When/Then/Before/After, cucumber-js's or quickpickle's.
+import { spawnSync } from "node:child_process";
+import fs from "node:fs";
+import http from "node:http";
+import os from "node:os";
+import path from "node:path";
+import { binVar, Context, dig, filesIn, includes, isEmpty, Result, same, show, split } from "./core.js";
+
+const BASIC = ["sh", "bash", "env", "cat", "echo", "printf", "mkdir", "rm", "cp", "mv", "chmod", "ls", "sed",
+  "grep", "head", "tail", "tr", "cut", "sort", "uniq", "wc", "dirname", "basename", "mktemp", "date",
+  "sleep", "true", "false", "test", "touch", "readlink", "realpath", "id", "uname"];
+
+function fail(message) {
+  throw new Error(message);
+}
+
+function check(ok, message) {
+  if (!ok) fail(typeof message === "function" ? message() : message);
+}
+
+function at(ctx, p) {
+  return path.join(ctx.directory ?? process.cwd(), p);
+}
+
+function returned(ctx) {
+  check(ctx.outcome, "no action was taken: a When leaves the result");
+  if (ctx.refused) {
+    ctx.refusalRead = true;
+    fail(`it was refused: ${JSON.stringify(ctx.refused.message || ctx.outcome.stderr)}`);
+  }
+  return ctx.result;
+}
+
+function rows(table) {
+  return typeof table?.raw === "function" ? table.raw() : table?.data ?? table;
+}
+
+function setEnv(ctx, name, value) {
+  if (!ctx.envSaved) {
+    ctx.envSaved = {};
+    ctx.cleanup(() => {
+      for (const [k, v] of Object.entries(ctx.envSaved)) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    });
+  }
+  if (!(name in ctx.envSaved)) ctx.envSaved[name] = process.env[name];
+  if (value === undefined) delete process.env[name];
+  else process.env[name] = value;
+}
+
+// --- stand-ins ----------------------------------------------------------------
+
+class Standins {
+  constructor(root) {
+    this.bin = path.join(root, "standins");
+    this.basic = path.join(root, "basic");
+    this.log = path.join(root, "standins.log");
+    fs.mkdirSync(this.bin, { recursive: true });
+    fs.writeFileSync(this.log, "");
+    this.only = false;
+    this.base = process.env.PATH ?? "";
+  }
+  script(name, body) {
+    const file = path.join(this.bin, name);
+    fs.writeFileSync(file, `#!${process.execPath}
+const fs = require("node:fs");
+fs.appendFileSync(${JSON.stringify(this.log)}, JSON.stringify({ name: ${JSON.stringify(name)}, args: process.argv.slice(2) }) + "\\n");
+${body}
+`);
+    fs.chmodSync(file, 0o755);
+  }
+  add(name, out = "", err = "", code = 0) {
+    this.script(name, `process.stdout.write(${JSON.stringify(out)}); process.stderr.write(${JSON.stringify(err)}); process.exitCode = ${code};`);
+  }
+  addTurns(name, answers) {
+    const store = path.join(this.bin, "..", `${name}.answers.json`);
+    fs.writeFileSync(store, JSON.stringify(answers));
+    this.script(name, `const answers = JSON.parse(fs.readFileSync(${JSON.stringify(store)}, "utf8"));
+const args = process.argv.slice(2).join(" ");
+const matches = (p) => new RegExp("^" + p.split("*").map((s) => s.replace(/[.+?^\${}()|[\\]\\\\]/g, "\\\\$&")).join(".*") + "$").test(args);
+const matching = answers.filter((a) => matches(a.args));
+const fresh = matching.filter((a) => !a.given);
+const answer = fresh[0] ?? matching.at(-1) ?? { exit: 127, stderr: ${JSON.stringify(name)} + ": no answer for " + args + "\\n" };
+answer.given = true;
+fs.writeFileSync(${JSON.stringify(store)}, JSON.stringify(answers));
+process.stdout.write(answer.stdout ?? ""); process.stderr.write(answer.stderr ?? ""); process.exitCode = Number(answer.exit ?? 0);`);
+  }
+  remove(name) {
+    fs.rmSync(path.join(this.bin, name), { force: true });
+  }
+  path() {
+    if (!this.only) return `${this.bin}${path.delimiter}${this.base}`;
+    fs.mkdirSync(this.basic, { recursive: true });
+    for (const tool of BASIC) {
+      const found = this.base.split(path.delimiter).map((d) => path.join(d, tool)).find((p) => fs.existsSync(p));
+      const link = path.join(this.basic, tool);
+      if (found && !fs.existsSync(link) && !fs.existsSync(path.join(this.bin, tool))) fs.symlinkSync(found, link);
+    }
+    return `${this.bin}${path.delimiter}${this.basic}`;
+  }
+  runs(name) {
+    return fs.readFileSync(this.log, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l))
+      .filter((e) => name === undefined || e.name === name).map((e) => e.args);
+  }
+}
+
+function standins(ctx) {
+  if (!ctx.standins) {
+    ctx.standins = new Standins(fs.mkdtempSync(path.join(os.tmpdir(), "pubtest-")));
+    setEnv(ctx, "PATH", ctx.standins.path());
+  }
+  return ctx.standins;
+}
+
+function refreshPath(ctx) {
+  process.env.PATH = ctx.standins.path();
+}
+
+// --- fake services ------------------------------------------------------------
+
+class Fake {
+  constructor(name) {
+    this.name = name;
+    this.answers = {};
+    this.requests = [];
+    this.server = http.createServer((req, res) => {
+      let body = "";
+      req.on("data", (c) => (body += c));
+      req.on("end", () => {
+        this.requests.push({ method: req.method, path: req.url, body, headers: req.headers });
+        const queue = this.answers[`${req.method} ${req.url}`] ?? this.answers[`${req.method} ${req.url.split("?")[0]}`];
+        const [status, text] = queue ? (queue.length > 1 ? queue.shift() : queue[0]) : [404, ""];
+        const headers = { "content-length": Buffer.byteLength(text) };
+        if (/^\s*[{[]/.test(text)) headers["content-type"] = "application/json";
+        res.writeHead(status, headers);
+        res.end(text);
+      });
+    });
+  }
+  start() {
+    return new Promise((resolve) => this.server.listen(0, "127.0.0.1", resolve));
+  }
+  get url() {
+    return `http://127.0.0.1:${this.server.address().port}`;
+  }
+  answer(request, status, body = "") {
+    (this.answers[request] ??= []).push([status, body]);
+  }
+  stop() {
+    return new Promise((resolve) => this.server.close(() => resolve()));
+  }
+}
+
+async function fake(ctx, name) {
+  if (!ctx.fakes[name]) {
+    const f = new Fake(name);
+    await f.start();
+    ctx.fakes[name] = f;
+    setEnv(ctx, name.replace(/[^A-Za-z0-9]/g, "_").toUpperCase() + "_URL", f.url);
+    ctx.cleanup(() => f.stop());
+  }
+  return ctx.fakes[name];
+}
+
+function asked(ctx, name) {
+  check(ctx.fakes[name], `there is no fake ${name} service`);
+  return ctx.fakes[name].requests;
+}
+
+/** Everything the action produced, by where it went. */
+export function produced(ctx) {
+  const out = {};
+  const o = ctx.outcome;
+  if (o) {
+    out.stdout = o.stdout;
+    out.stderr = o.stderr;
+    out["the result"] = o.value === undefined ? "" : (typeof o.value === "string" ? o.value : show(o.value));
+    if (o.refused) out["the refusal"] = `${o.refused.message} ${o.refused.error?.stack ?? ""}`;
+  }
+  if (ctx.answer) out["the answer"] = JSON.stringify(ctx.answer.headers) + ctx.answer.text;
+  if (ctx.directory) {
+    const before = ctx.written ?? {};
+    for (const [p, data] of Object.entries(filesIn(ctx.directory))) {
+      if (before[p] !== data) out[`the file ${p}`] = Buffer.from(data, "base64").toString("utf8");
+    }
+  }
+  // The arguments it gave a program; what it gave one through its environment is deliberately not a leak.
+  if (ctx.standins) out["the programs it ran"] = JSON.stringify(ctx.standins.runs());
+  for (const [name, f] of Object.entries(ctx.fakes)) out[`what it sent ${name}`] = JSON.stringify(f.requests);
+  return out;
+}
+
+function git(ctx, ...args) {
+  const done = spawnSync("git", args, {
+    cwd: ctx.directory ?? process.cwd(), encoding: "utf8",
+    env: { ...process.env, GIT_AUTHOR_NAME: "pubtest", GIT_AUTHOR_EMAIL: "pubtest@example.org",
+      GIT_COMMITTER_NAME: "pubtest", GIT_COMMITTER_EMAIL: "pubtest@example.org" },
+  });
+  check(done.status === 0, () => `git ${args.join(" ")}: ${done.stderr}`);
+  return done.stdout.trim();
+}
+
+function runCommand(ctx, command, input) {
+  const argv = split(command);
+  argv[0] = ctx.programs[argv[0]] ?? argv[0];
+  ctx.acting();
+  const done = spawnSync(argv[0], argv.slice(1), {
+    cwd: ctx.directory ?? process.cwd(), input: input ?? "", encoding: "utf8", timeout: 120_000,
+    env: { ...process.env, ...(ctx.standins ? { PATH: ctx.standins.path() } : {}) },
+  });
+  if (done.error) {
+    return ctx.ran(new Result({ code: 127, stderr: String(done.error.message), argv }));
+  }
+  return ctx.ran(new Result({ code: done.status ?? 1, stdout: done.stdout, stderr: done.stderr, argv }));
+}
+
+async function send(ctx, method, p, body, type) {
+  check(ctx.client, "the HTTP steps need the suite's client: register(api, { client })");
+  const headers = { ...ctx.headers, ...(type ? { "content-type": type } : {}) };
+  ctx.acting();
+  ctx.answer = await ctx.client(method, p, headers, body);
+  ctx.ran(new Result({ value: ctx.answer }));
+}
+
+function answer(ctx) {
+  check(ctx.answer, "no request was sent");
+  return ctx.answer;
+}
+
+function showAnswer(a) {
+  return `${a.status} ${JSON.stringify(a.headers)}\n${a.text.slice(0, 2000)}`;
+}
+
+function showRun(r) {
+  return r?.describe ? r.describe() : show(r);
+}
+
+/** The steps, as [kind, expression, step(ctx, ...args)]. */
+export const STEPS = [
+  // The result
+  ["Then", "the result is {string}", (ctx, v) => { const got = returned(ctx); check(same(got, v), () => `the result is ${show(got)}, not ${v}`); }],
+  ["Then", "the result is:", (ctx, doc) => {
+    const got = returned(ctx);
+    const table = rows(doc);
+    if (Array.isArray(table)) {
+      const [keys, ...data] = table;
+      check(Array.isArray(got) && got.length === data.length, () => `the result is ${show(got)}`);
+      data.forEach((row, i) => keys.forEach((k, j) => check(same(dig(got[i], k), row[j]), () => `the result is ${show(got)}; ${k} is not ${row[j]}`)));
+      return;
+    }
+    check(same(got, String(doc)), () => `the result is ${show(got)}, not:\n${doc}`);
+  }],
+  ["Then", "the result includes {string}", (ctx, v) => { const got = returned(ctx); check(includes(got, v), () => `the result ${show(got)} does not include ${v}`); }],
+  ["Then", "the result does not include {string}", (ctx, v) => { const got = returned(ctx); check(!includes(got, v), () => `the result ${show(got)} includes ${v}`); }],
+  ["Then", "the result's {string} is {string}", (ctx, k, v) => { const got = dig(returned(ctx), k); check(same(got, v), () => `the result's ${k} is ${show(got)}, not ${v}`); }],
+  ["Then", "the result has {int} {word}", (ctx, n, noun) => { const got = returned(ctx); check(got?.length === n, () => `the result has ${got?.length} ${noun}, not ${n}: ${show(got)}`); }],
+  ["Then", "the result is empty", (ctx) => { const got = returned(ctx); check(isEmpty(got), () => `the result is ${show(got)}`); }],
+  ["Then", "it is refused, saying {string}", (ctx, t) => {
+    ctx.refusalRead = true;
+    check(ctx.refused, () => `it was not refused: the result is ${show(ctx.result)}`);
+    const said = ctx.refused.message || ctx.outcome.stderr;
+    check(said.includes(t), () => `it was refused, saying ${JSON.stringify(said)}`);
+  }],
+  ["Then", "it is refused", (ctx) => { ctx.refusalRead = true; check(ctx.refused, () => `it was not refused: the result is ${show(ctx.result)}`); }],
+  ["Then", "it is not refused", (ctx) => { ctx.refusalRead = true; check(!ctx.refused, () => `it was refused, saying ${ctx.refused.message}`); }],
+
+  // Files
+  ["Given", "a scratch directory", (ctx) => {
+    ctx.directory = fs.mkdtempSync(path.join(os.tmpdir(), "pubtest-scratch-"));
+    const dir = ctx.directory;
+    ctx.cleanup(() => fs.rmSync(dir, { recursive: true, force: true }));
+  }],
+  ["Given", "a file {string} holding {string}", (ctx, p, t) => write(ctx, p, `${t}\n`)],
+  ["Given", "a file {string} holding:", (ctx, p, doc) => write(ctx, p, `${doc}\n`)],
+  ["Given", "the file {string} is executable", (ctx, p) => fs.chmodSync(at(ctx, p), 0o755)],
+  ["Given", "the file {string} is removed", (ctx, p) => fs.rmSync(at(ctx, p), { recursive: true, force: true })],
+  ["When", "the file {string} changes to:", (ctx, p, doc) => write(ctx, p, `${doc}\n`)],
+  ["Then", "the file {string} exists", (ctx, p) => check(fs.existsSync(at(ctx, p)), `there is no ${p}`)],
+  ["Then", "the file {string} does not exist", (ctx, p) => check(!fs.existsSync(at(ctx, p)), `${p} exists`)],
+  ["Then", "the file {string} holds {string}", (ctx, p, t) => { const got = text(ctx, p); check(got.replace(/\n$/, "") === t, `${p} holds ${JSON.stringify(got)}`); }],
+  ["Then", "the file {string} holds:", (ctx, p, doc) => { const got = text(ctx, p); check(got.replace(/\n$/, "") === String(doc).replace(/\n$/, ""), `${p} holds:\n${got}`); }],
+  ["Then", "the file {string} includes {string} once", (ctx, p, t) => { const n = text(ctx, p).split("\n").filter((l) => l.includes(t)).length; check(n === 1, `${p} has ${n} lines with ${JSON.stringify(t)}`); }],
+  ["Then", "the file {string} includes {string}", (ctx, p, t) => check(text(ctx, p).includes(t), `${p} does not include ${JSON.stringify(t)}`)],
+  ["Then", "the file {string} does not include {string}", (ctx, p, t) => check(!text(ctx, p).includes(t), `${p} includes ${JSON.stringify(t)}`)],
+  ["Then", "the JSON in {string} is:", (ctx, p, doc) => { const got = JSON.parse(text(ctx, p)); check(same(got, String(doc)), `${p} holds ${show(got)}`); }],
+  ["Then", "the JSON in {string} has {string} equal to {string}", (ctx, p, k, v) => { const got = dig(JSON.parse(text(ctx, p)), k); check(same(got, v), `${p}'s ${k} is ${show(got)}, not ${v}`); }],
+  ["Then", "nothing was written", (ctx) => {
+    check(ctx.directory, "nothing was written needs a scratch directory");
+    check(ctx.written !== null, "nothing was written needs a When: it compares with the directory before it");
+    const after = filesIn(ctx.directory);
+    const changed = [...new Set([...Object.keys(ctx.written), ...Object.keys(after)])].filter((p) => ctx.written[p] !== after[p]).sort();
+    check(changed.length === 0, `written: ${changed.join(", ")}`);
+  }],
+
+  // The environment
+  ["Given", "the environment sets {string} to {string}", (ctx, n, v) => setEnv(ctx, n, v)],
+  ["Given", "the environment does not set {string}", (ctx, n) => setEnv(ctx, n, undefined)],
+
+  // Programs
+  ["Given", "the program under test is {string}", (ctx, name) => {
+    const v = binVar(name);
+    check(process.env[v], `${v} is not set: it must name the directory holding ${name}`);
+    const p = path.join(process.env[v], name + (process.platform === "win32" ? ".exe" : ""));
+    check(fs.existsSync(p), `${v}=${process.env[v]} has no ${name}`);
+    ctx.programs[name] = p;
+  }],
+  ["When", "I run {string}", (ctx, c) => { runCommand(ctx, c); }],
+  ["When", "I run {string} with the input:", (ctx, c, doc) => { runCommand(ctx, c, `${doc}\n`); }],
+  ["Then", "it succeeds", (ctx) => { ctx.refusalRead = true; check(ctx.outcome?.code === 0, () => showRun(ctx.outcome)); }],
+  ["Then", "it fails", (ctx) => { ctx.refusalRead = true; check(ctx.outcome && ctx.outcome.code !== 0, () => showRun(ctx.outcome)); }],
+  ["Then", "the exit code is {int}", (ctx, n) => { ctx.refusalRead = true; check(ctx.outcome?.code === n, () => showRun(ctx.outcome)); }],
+  ["Then", "it prints {string}", (ctx, t) => check(ctx.outcome?.stdout.includes(t), () => showRun(ctx.outcome))],
+  ["Then", "it does not print {string}", (ctx, t) => check(!ctx.outcome?.stdout.includes(t), () => showRun(ctx.outcome))],
+  ["Then", "it prints:", (ctx, doc) => check(ctx.outcome?.stdout.replace(/\n$/, "") === String(doc).replace(/\n$/, ""), () => showRun(ctx.outcome))],
+  ["Then", "stdout is empty", (ctx) => check(ctx.outcome?.stdout === "", () => showRun(ctx.outcome))],
+  ["Then", "stderr mentions {string}", (ctx, t) => check(ctx.outcome?.stderr.includes(t), () => showRun(ctx.outcome))],
+  ["Then", "stderr does not mention {string}", (ctx, t) => check(!ctx.outcome?.stderr.includes(t), () => showRun(ctx.outcome))],
+
+  // Stand-in programs
+  ["Given", "a stand-in {string}", (ctx, n) => { standins(ctx).add(n); refreshPath(ctx); }],
+  ["Given", "a stand-in {string} that prints {string}", (ctx, n, t) => { standins(ctx).add(n, `${t}\n`); refreshPath(ctx); }],
+  ["Given", "a stand-in {string} that prints:", (ctx, n, doc) => { standins(ctx).add(n, `${doc}\n`); refreshPath(ctx); }],
+  ["Given", "a stand-in {string} that fails, saying {string}", (ctx, n, t) => { standins(ctx).add(n, "", `${t}\n`, 1); refreshPath(ctx); }],
+  ["Given", "a stand-in {string} that answers in turn:", (ctx, n, table) => {
+    const [keys, ...data] = rows(table);
+    const answers = data.map((row) => {
+      const a = Object.fromEntries(keys.map((k, i) => [k, row[i]]));
+      for (const s of ["stdout", "stderr"]) if (a[s]) a[s] = a[s].replaceAll("\\n", "\n") + "\n";
+      return a;
+    });
+    standins(ctx).addTurns(n, answers);
+    refreshPath(ctx);
+  }],
+  ["Given", "only stand-ins are installed", (ctx) => { standins(ctx).only = true; refreshPath(ctx); }],
+  ["Given", "{string} is not installed", (ctx, n) => { const s = standins(ctx); s.remove(n); s.only = true; refreshPath(ctx); }],
+  ["Then", "{string} was run with {string}", (ctx, n, args) => { const runs = ctx.standins?.runs(n) ?? []; check(runs.some((r) => JSON.stringify(r) === JSON.stringify(split(args))), `${n} ran with ${show(runs)}`); }],
+  ["Then", "{string} was run {int} times", (ctx, n, k) => { const runs = ctx.standins?.runs(n) ?? []; check(runs.length === k, `${n} ran ${runs.length} times`); }],
+  ["Then", "{string} was not run", (ctx, n) => { const runs = ctx.standins?.runs(n) ?? []; check(runs.length === 0, `${n} ran with ${show(runs)}`); }],
+  ["Then", "nothing was run", (ctx) => { const runs = ctx.standins?.runs() ?? []; check(runs.length === 0, `ran: ${show(runs)}`); }],
+
+  // HTTP: the service under test
+  ["Given", "I am signed in as {string}", (ctx, email) => { ctx.headers[ctx.identityHeader] = email; }],
+  ["Given", "I am not signed in", (ctx) => { delete ctx.headers[ctx.identityHeader]; }],
+  ["Given", "requests come from {string}", (ctx, origin) => { ctx.headers.origin = origin; }],
+  ["When", "I GET {string}", (ctx, p) => send(ctx, "GET", p)],
+  ["When", "I POST to {string} with:", (ctx, p, doc) => send(ctx, "POST", p, String(doc), "application/json")],
+  ["When", "I POST to {string} with the form:", (ctx, p, table) => {
+    let data = rows(table);
+    if (data[0]?.[0] === "field" && data[0]?.[1] === "value") data = data.slice(1);
+    return send(ctx, "POST", p, new URLSearchParams(data.map(([k, v]) => [k, v])).toString(), "application/x-www-form-urlencoded");
+  }],
+  ["When", "I send {string} to {string}", (ctx, m, p) => send(ctx, m, p)],
+  ["Then", "the answer is {int}", (ctx, s) => { const a = answer(ctx); check(a.status === s, () => showAnswer(a)); }],
+  ["Then", "the answer's {string} is {string}", (ctx, h, v) => { const a = answer(ctx); check(a.header(h) === v, () => showAnswer(a)); }],
+  ["Then", "the answer has no {string}", (ctx, h) => { const a = answer(ctx); check(a.header(h) === undefined, () => showAnswer(a)); }],
+  ["Then", "the answer includes {string} once", (ctx, t) => { const a = answer(ctx); check(a.text.split("\n").filter((l) => l.includes(t)).length === 1, () => showAnswer(a)); }],
+  ["Then", "the answer includes {string}", (ctx, t) => { const a = answer(ctx); check(a.text.includes(t), () => showAnswer(a)); }],
+  ["Then", "the answer does not include {string}", (ctx, t) => { const a = answer(ctx); check(!a.text.includes(t), () => showAnswer(a)); }],
+  ["Then", "the answer is the JSON:", (ctx, doc) => { const a = answer(ctx); check(same(a.json(), String(doc)), () => showAnswer(a)); }],
+  ["Then", "the answer redirects to {string}", (ctx, p) => { const a = answer(ctx); check(a.status >= 300 && a.status < 400 && a.header("location") === p, () => showAnswer(a)); }],
+
+  // HTTP: fake services
+  ["Given", "a fake {string} service", (ctx, n) => fake(ctx, n)],
+  ["Given", "the {string} service answers {string} with {int}", async (ctx, n, r, s) => (await fake(ctx, n)).answer(r, s)],
+  ["Given", "the {string} service answers {string} with {int} and:", async (ctx, n, r, s, doc) => (await fake(ctx, n)).answer(r, s, String(doc))],
+  ["Given", "the answers recorded in {string}", async (ctx, dir) => {
+    let base = path.join(ctx.directory ?? process.cwd(), dir);
+    if (!fs.existsSync(base)) base = dir;
+    for (const file of fs.readdirSync(base).filter((f) => f.endsWith(".json")).sort()) {
+      const e = JSON.parse(fs.readFileSync(path.join(base, file), "utf8"));
+      const body = typeof e.body === "string" ? e.body : JSON.stringify(e.body ?? "");
+      (await fake(ctx, e.service)).answer(`${e.method} ${e.path}`, e.status, body);
+      ctx.recorded.push(e);
+    }
+  }],
+  ["Then", "the {string} service was asked {string}", (ctx, n, r) => { const a = asked(ctx, n).map((q) => `${q.method} ${q.path}`); check(a.includes(r) || a.map((x) => x.split("?")[0]).includes(r), `${n} was asked ${show(a)}`); }],
+  ["Then", "the {string} service was sent:", (ctx, n, doc) => {
+    const bodies = asked(ctx, n).map((q) => { try { return JSON.parse(q.body); } catch { return q.body; } });
+    check(bodies.some((b) => same(b, String(doc))), `${n} was sent ${show(bodies)}`);
+  }],
+  ["Then", "the {string} service was asked nothing", (ctx, n) => check(asked(ctx, n).length === 0, `${n} was asked ${show(asked(ctx, n))}`)],
+  ["Then", "nothing was sent", (ctx) => { const sent = Object.values(ctx.fakes).filter((f) => f.requests.length); check(sent.length === 0, `sent: ${sent.map((f) => f.name)}`); }],
+  ["Then", "every recorded answer was used", (ctx) => {
+    const used = new Set(Object.values(ctx.fakes).flatMap((f) => f.requests.map((r) => `${r.method} ${r.path}`)));
+    const unused = ctx.recorded.map((e) => `${e.method} ${e.path}`).filter((r) => !used.has(r));
+    check(unused.length === 0, `not used: ${unused}`);
+  }],
+
+  // Secrets
+  ["Given", "the secret {string}", (ctx, v) => { ctx.secrets.push(v); }],
+  ["Then", "no secret appears in what it produced", (ctx) => {
+    check(ctx.secrets.length, "no secret was given: the step checks the values a Given named");
+    const leaks = Object.entries(produced(ctx)).flatMap(([where, t]) => ctx.secrets.filter((s) => t.includes(s)).map((s) => `${JSON.stringify(s)} in ${where}`));
+    check(leaks.length === 0, `a secret appears: ${leaks.join("; ")}`);
+  }],
+
+  // Git
+  ["Given", "a git repository", (ctx) => { git(ctx, "init", "-q", "-b", "main"); git(ctx, "commit", "-q", "--allow-empty", "-m", "start"); }],
+  ["Given", "a commit tagged {string}", (ctx, tag) => { git(ctx, "add", "-A"); git(ctx, "commit", "-q", "--allow-empty", "-m", tag); git(ctx, "tag", tag); }],
+  ["Given", "the branch {string}", (ctx, b) => { git(ctx, "switch", "-q", "-c", b); }],
+];
+
+function write(ctx, p, t) {
+  const target = at(ctx, p);
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, t);
+}
+
+function text(ctx, p) {
+  const target = at(ctx, p);
+  check(fs.existsSync(target), `there is no ${p}`);
+  return fs.readFileSync(target, "utf8");
+}
+
+function arity(expression) {
+  return (expression.match(/\{[a-z]+\}/g) ?? []).length + (expression.endsWith(":") ? 1 : 0);
+}
+
+// cucumber-js checks a step function's arity against its expression's
+// parameters, so each wrapper takes exactly that many.
+const WRAPPERS = [
+  (s) => function () { return s(this.pubtest); },
+  (s) => function (a) { return s(this.pubtest, a); },
+  (s) => function (a, b) { return s(this.pubtest, a, b); },
+  (s) => function (a, b, c) { return s(this.pubtest, a, b, c); },
+  (s) => function (a, b, c, d) { return s(this.pubtest, a, b, c, d); },
+];
+
+/**
+ * Define pubtest's steps with a runner's API: cucumber-js's module, or
+ * quickpickle's (pass { runner: "quickpickle" }).
+ *
+ *   import * as cucumber from "@cucumber/cucumber";
+ *   import { register } from "@sustenaut/pubtest";
+ *   register(cucumber, { client: () => fromFetch(worker.fetch) });
+ *
+ * `client` makes the scenario's HTTP client; `identityHeader` is the header
+ * a signed-in person's email comes in (X-Forwarded-Email).
+ */
+export function register(api, { runner = "cucumber", client, identityHeader = "x-forwarded-email" } = {}) {
+  const quick = runner === "quickpickle";
+  const begin = (world) => {
+    world.pubtest = new Context();
+    world.pubtest.identityHeader = identityHeader.toLowerCase();
+    if (client) world.pubtest.client = client(world);
+    world.attempt = (action) => world.pubtest.attempt(action);
+  };
+  const end = async (world) => {
+    const ctx = world.pubtest;
+    try {
+      if (ctx.refused && !ctx.refusalRead) {
+        throw new Error(`the action was refused, and no step read it: ${ctx.refused.error?.stack ?? ctx.refused.message}`);
+      }
+    } finally {
+      await ctx.close();
+    }
+  };
+  if (quick) {
+    api.Before(async (world) => begin(world));
+    api.After(async (world) => end(world));
+  } else {
+    api.Before(function () { begin(this); });
+    api.After(async function () { await end(this); });
+  }
+  for (const [kind, expression, step] of STEPS) {
+    if (quick) api[kind](expression, async (world, ...args) => step(world.pubtest, ...args));
+    else api[kind](expression, WRAPPERS[arity(expression)](step));
+  }
+}

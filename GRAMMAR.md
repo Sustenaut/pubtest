@@ -13,7 +13,7 @@ A scenario sets something up, takes one action, and checks what came of it.
 Scenario: A check with a value it may not show is refused
   Given a scratch directory
   And the secret "canary-7f3e"
-  And the file "pubkit.json" holds:
+  And a file "pubkit.json" holding:
     """
     {"kind": "service", "deploy": {"token": "canary-7f3e"}}
     """
@@ -34,14 +34,24 @@ Scenario: A check with a value it may not show is refused
   and the programs run. They are all pubtest's, so a check reads the same in
   every repository.
 
-A scenario has a When (pubkit's TEST-04), however many Givens and Thens it
-needs. More steps of pubtest's are better than one step of the suite's that
-does the same.
+A scenario has at least one When (pubkit's TEST-04), however many Givens and
+Thens it needs. Its action may be a chain (`When I run … And the file "P"
+changes to: … And I run …`): an edit between two runs is one action. More
+steps of pubtest's are better than one step of the suite's that does the
+same.
 
 ## The result
 
-A suite's own When step does its action through pubtest's context and leaves
-what came of it there:
+Whichever kind of When a scenario takes, what it came to is one record: the
+**value** it returned or the **refusal** it raised, its **exit code**, and what
+it printed on **stdout** and **stderr**.
+
+- `When I run "CMD"` fills the exit code, stdout and stderr.
+- A suite's own When calls `attempt`, which fills the value or the refusal,
+  and what the call printed too: code 0 when it returns, 1 when it raises,
+  and the code it exits with (`SystemExit` in Python, `process.exit` in
+  Node). So a suite that calls its command-line `main(argv)` in-process
+  reads it with the same steps as one that runs the program.
 
 ```python
 @when(parsers.parse('the planner plans "{week}"'))
@@ -55,17 +65,24 @@ When("the planner plans {string}", async function (week) {
 });
 ```
 
-`attempt` keeps the return value as the result, or the error it raised as
-the refusal: an exception, a `SystemExit` or a rejected promise. The result
-checks below then read either. A program run by `I run` is a result too: its
-exit code, stdout and stderr.
+`attempt` awaits what the action returns when it is awaitable, in Python as
+in Node.
+
+**A refusal no step reads fails the scenario.** When the action was refused
+and no Then read the refusal (`it is refused…`, `it fails`, `the exit code
+is N`), the scenario fails when it ends, with the refusal's traceback. A
+broken When cannot pass through `the result is empty`.
 
 ## The steps
 
-Quoted values are literal text. `V` is compared as JSON when it reads as
-JSON (`2`, `true`, `"x"`, `[1, 2]`) and as text otherwise. A docstring
-(`"""`) or a table carries anything longer. Paths are relative to the
-scratch directory.
+Quoted values are literal text. A step's value `V` is compared by one rule:
+**when the result is text, V is compared as text; otherwise V is read as JSON
+and compared as a value, and a V that does not read as JSON is compared with
+the result's text.** So `the result is "2"` holds for the text `2` and for the
+number 2, and `"true"` and `"null"` hold only for those values. The same rule
+holds for `includes` and `the result's "K" is "V"`. A dotted key indexes maps
+by name and lists by number (`people.0.name`). A docstring (`"""`) or a table
+carries anything longer. Paths are relative to the scratch directory.
 
 ### The result
 
@@ -73,11 +90,12 @@ scratch directory.
 | --- | --- |
 | `Then the result is "V"` | the result equals V |
 | `Then the result is:` + docstring | the result equals the JSON (or the text) given |
+| `Then the result is:` + table | the result is a list of maps, one per row, the header row their keys, each cell compared as a V |
 | `Then the result includes "V"` | text contains it, a list holds it, a map has it as a key |
 | `Then the result does not include "V"` | the opposite |
 | `Then the result's "K" is "V"` | the value at the dotted key K (`a.b.0`) equals V |
 | `Then the result has N items` | the result's length is N (any noun: `N links`, `N emails`) |
-| `Then the result is empty` | nothing: `None`, `""`, `[]`, `{}` |
+| `Then the result is empty` | nothing: `None`, `null`, `undefined`, `""`, `[]`, `{}` |
 | `Then it is refused, saying "T"` | the action raised, and its message contains T |
 | `Then it is refused` | the action raised |
 | `Then it is not refused` | the action returned |
@@ -87,8 +105,8 @@ scratch directory.
 | Step | Does or checks |
 | --- | --- |
 | `Given a scratch directory` | a fresh directory, the working directory for the scenario; later steps' paths are in it |
-| `Given the file "P" holds "T"` | writes one line of text |
-| `Given the file "P" holds:` + docstring | writes the text |
+| `Given a file "P" holding "T"` | writes one line of text (a Given's words differ from the Then's: cucumber-js matches a step by its text alone) |
+| `Given a file "P" holding:` + docstring | writes the text |
 | `Given the file "P" is executable` | sets its mode so it runs |
 | `Given the file "P" is removed` | deletes it, or a directory and what it holds |
 | `When the file "P" changes to:` + docstring | rewrites it, as a person would between two runs |
@@ -99,7 +117,7 @@ scratch directory.
 | `Then the file "P" includes "T" once` | exactly one line holds T |
 | `Then the JSON in "P" is:` + docstring | the file parses to the JSON given |
 | `Then the JSON in "P" has "K" equal to "V"` | the value at the dotted key K |
-| `Then nothing was written` | no file in the scratch directory was made, changed or removed since its Given |
+| `Then nothing was written` | no file in the scratch directory was made, changed or removed since the first When |
 
 ### The environment
 
@@ -113,7 +131,7 @@ scratch directory.
 | Step | Does or checks |
 | --- | --- |
 | `Given the program under test is "NAME"` | `NAME` in later `I run` steps is the built program from `<NAME>_BIN_DIR`, never from PATH |
-| `When I run "CMD"` | runs CMD (split as a shell splits it) in the scratch directory, and keeps what it did as the result |
+| `When I run "CMD"` | runs CMD, split as a shell splits words, in the scratch directory, for at most 120 seconds. Its first word is the program under test of that name when a Given named one (from its `_BIN_DIR`), and otherwise the program found on PATH, stand-ins first |
 | `When I run "CMD" with the input:` + docstring | the docstring on its standard input |
 | `Then it succeeds` / `it fails` | exit code 0, or not |
 | `Then the exit code is N` | |
@@ -134,7 +152,8 @@ gcloud without reaching them.
 | `Given a stand-in "NAME" that prints "T"` | |
 | `Given a stand-in "NAME" that prints:` + docstring | |
 | `Given a stand-in "NAME" that fails, saying "T"` | exits 1 with T on stderr |
-| `Given only stand-ins are installed` | PATH holds the stand-ins and the system's basic tools, so any other program is missing |
+| `Given a stand-in "NAME" that answers in turn:` + table | a row per answer: `args` (a pattern, `*` for anything), and optionally `exit`, `stdout`, `stderr`. A run takes the first matching answer not given yet, or the last matching one once all are given |
+| `Given only stand-ins are installed` | PATH holds the stand-ins and these tools alone, so any other program is missing: sh, bash, env, cat, echo, printf, mkdir, rm, cp, mv, chmod, ls, sed, grep, head, tail, tr, cut, sort, uniq, wc, dirname, basename, mktemp, date, sleep, true, false, test, touch, readlink, realpath, id, uname |
 | `Given "NAME" is not installed` | |
 | `Then "NAME" was run with "ARGS"` | some run had exactly these arguments |
 | `Then "NAME" was run N times` | |
@@ -143,11 +162,16 @@ gcloud without reaching them.
 
 ### HTTP: a service under test
 
-A suite tells pubtest how to send its service a request: a `http_client`
-fixture in Python, `this.request` in Node, given a method, a path, headers
-and a body, and answering a status, headers and a body. A Starlette or
-FastAPI app, a WSGI app and a Cloudflare Worker's `fetch` each have an
-adapter.
+The suite constructs the client, since it is the suite that knows its app,
+its Worker's bindings or its server; pubtest only calls it. In Python it is
+the `http_client` fixture; in Node, `register(api, { client })`. A client
+takes a method, a path, headers and a body, and answers a status, headers
+(compared without case) and the body as text, its JSON read when a step asks.
+It does not follow redirects. The JSON steps send `application/json`, the
+form step `application/x-www-form-urlencoded`. pubtest ships adapters for an
+ASGI app (Starlette, FastAPI) and a WSGI app in Python, and for a `fetch`
+handler (a Cloudflare Worker) and a listening server in Node; none needs a
+dependency, so a suite that tests no service installs nothing for them.
 
 | Step | Does or checks |
 | --- | --- |
@@ -182,7 +206,7 @@ adapter.
 
 | Step | Does or checks |
 | --- | --- |
-| `Given the answers recorded in "DIR"` | requests to the services they name are answered from those files, in order |
+| `Given the answers recorded in "DIR"` | each JSON file in DIR, in name order, is one answer, `{"service", "method", "path", "status", "body"}`: the fake service it names (made if need be) answers that request with it |
 | `Then every recorded answer was used` | |
 
 ### Secrets
@@ -190,7 +214,7 @@ adapter.
 | Step | Checks |
 | --- | --- |
 | `Given the secret "V"` | V is a value that must never show |
-| `Then no secret appears in what it produced` | not in stdout or stderr, the result or the refusal, any file written, any stand-in's arguments or any request sent |
+| `Then no secret appears in what it produced` | not in stdout or stderr, the result or the refusal, the answer, any file written since the first When, any stand-in's arguments or any request sent to a fake service. A secret given to a program through its environment is how it should reach it, and is not a leak |
 
 ### Git
 
