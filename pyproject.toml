@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pubtest"
+version = "0.1.0"
+description = "The Gherkin steps every Sustenaut suite shares, as a pytest-bdd plugin (and, from the same grammar, an npm package)."
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+authors = [{ name = "David Schryer", email = "schryer@gmail.com" }]
+dependencies = ["pytest>=8", "pytest-bdd>=8.1"]
+
+[project.urls]
+Repository = "https://github.com/Sustenaut/pubtest"
+
+[project.entry-points.pytest11]
+pubtest = "pubtest.plugin"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.coverage.run]
+source = ["pubtest"]
+patch = ["subprocess"]
+parallel = true
+
+[tool.coverage.xml]
+output = "coverage/coverage.xml"

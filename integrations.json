@@ -1,0 +1,41 @@
+{
+  "uses": [
+    {
+      "plugin": "github.app-token",
+      "paths": [
+        ".github/workflows/main.yml",
+        ".github/workflows/pr.yml",
+        "scripts/go-live.sh"
+      ],
+      "mode": "required"
+    },
+    {
+      "plugin": "sonarcloud.scan",
+      "paths": [
+        ".github/workflows/main.yml",
+        ".github/workflows/pr.yml"
+      ],
+      "mode": "required"
+    },
+    {
+      "plugin": "github.repo-ops",
+      "paths": [
+        "scripts/go-live.sh"
+      ],
+      "mode": "required"
+    },
+    {
+      "plugin": "sonarcloud.read",
+      "paths": [
+        "scripts/go-live.sh"
+      ],
+      "mode": "required"
+    }
+  ],
+  "exclude": [
+    {
+      "path": "corpus/**",
+      "reason": "Release records, not code"
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "name": "@sustenaut/pubtest",
+  "version": "0.1.0",
+  "description": "The Gherkin steps every Sustenaut suite shares, for cucumber-js and quickpickle (and, from the same grammar, a pytest-bdd plugin).",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": "./js/index.js",
+    "./http": "./js/http.js"
+  },
+  "files": [
+    "js",
+    "GRAMMAR.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Sustenaut/pubtest.git"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "cucumber-js && vitest run"
+  },
+  "devDependencies": {
+    "@cucumber/cucumber": "13.3.0",
+    "quickpickle": "1.11.2",
+    "vitest": "4.1.12"
+  },
+  "overrides": {
+    "uuid": "11.1.1"
+  }
+}
