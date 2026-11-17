@@ -1,4 +1,0 @@
-{
-  "category": "added",
-  "change": "More steps: the JSON and matched lines a program prints, a text result matched by a pattern (only `*` is special), YAML files, files copied from the repository, executable files and what a directory holds, fake services' headers and counts, requests with headers and any method's body or a file's bytes, commits, bare remotes and tags, and stand-ins that read their input or are run with matching arguments"
-}

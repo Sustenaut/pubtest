@@ -1,4 +1,0 @@
-{
-  "category": "internal",
-  "change": "The suite-ctx scenario's inner suite no longer turns off a pytest plugin named pubkit, which nothing installs since pubkit became pubrules"
-}

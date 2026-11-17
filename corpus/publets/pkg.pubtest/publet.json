@@ -2,7 +2,7 @@
   "claims": {
     "identity": {
       "class": "archival",
-      "content": "pubtest 0.2.0 is released as v0.2.0 from commit 502f35cf106a6579342fc5c4b6154685af8628cc.",
+      "content": "pubtest 0.2.1 is released as v0.2.1 from commit ee4cb1cc40fa1f03437be2f885b409a422ecf233.",
       "data": {
         "columns": [
           {
@@ -27,25 +27,25 @@
         "rows": [
           [
             "pubtest",
-            "0.2.0",
+            "0.2.1",
             "",
             "",
-            "v0.2.0",
-            "502f35cf106a6579342fc5c4b6154685af8628cc"
+            "v0.2.1",
+            "ee4cb1cc40fa1f03437be2f885b409a422ecf233"
           ]
         ]
       },
-      "scope": "the published release v0.2.0 of pubtest",
+      "scope": "the published release v0.2.1 of pubtest",
       "sources": [
         {
           "ref": "pubtest",
-          "revision": "502f35cf106a6579342fc5c4b6154685af8628cc"
+          "revision": "ee4cb1cc40fa1f03437be2f885b409a422ecf233"
         }
       ]
     },
     "release": {
       "class": "archival",
-      "content": "pubtest 0.2.0 was released on 2026-11-17 from commit 502f35cf106a6579342fc5c4b6154685af8628cc with these changes.",
+      "content": "pubtest 0.2.1 was released on 2026-11-17 from commit ee4cb1cc40fa1f03437be2f885b409a422ecf233 with these changes.",
       "data": {
         "columns": [
           {
@@ -58,26 +58,26 @@
         "rows": [
           [
             "internal",
-            "wheel.yml attaches the wheel to each release, as pubhost's does"
+            "The suite-ctx scenario's inner suite no longer turns off a pytest plugin named pubkit, which nothing installs since pubkit became pubrules"
           ],
           [
-            "fixed",
-            "A suite with a ctx fixture of its own (a dict, as suites had under pubkit's plugin) keeps every pubtest step: the steps use pubtest_ctx, which is the suite's ctx only when it is pubtest's"
+            "added",
+            "More steps: the JSON and matched lines a program prints, a text result matched by a pattern (only `*` is special), YAML files, files copied from the repository, executable files and what a directory holds, fake services' headers and counts, requests with headers and any method's body or a file's bytes, commits, bare remotes and tags, and stand-ins that read their input or are run with matching arguments"
           ],
           [
-            "changed",
-            "Hypothesis's examples per property come from PUBRULES_FUZZ_RUNS, which pubrules' CI sets, in place of PUBKIT_FUZZ_RUNS, and run under a profile named pubrules; pubtest no longer refuses to load beside pubkit's old pytest plugin, which pubkit 0.42.0 dropped"
+            "internal",
+            "The Node steps' coverage (c8, coverage/lcov.info) goes to SonarQube Cloud beside the Python's"
           ]
         ]
       },
       "depends": [
         "#identity"
       ],
-      "scope": "the published release v0.2.0 of pubtest",
+      "scope": "the published release v0.2.1 of pubtest",
       "sources": [
         {
           "ref": "pubtest",
-          "revision": "502f35cf106a6579342fc5c4b6154685af8628cc"
+          "revision": "ee4cb1cc40fa1f03437be2f885b409a422ecf233"
         }
       ]
     }

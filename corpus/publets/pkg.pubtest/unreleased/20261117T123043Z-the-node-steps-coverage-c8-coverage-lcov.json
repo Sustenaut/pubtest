@@ -1,4 +1,0 @@
-{
-  "category": "internal",
-  "change": "The Node steps' coverage (c8, coverage/lcov.info) goes to SonarQube Cloud beside the Python's"
-}
