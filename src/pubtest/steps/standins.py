@@ -90,48 +90,48 @@ class Standins:
         return [e["args"] for e in entries if name is None or e["name"] == name]
 
 
-def standins(ctx, tmp_path) -> Standins:
-    if getattr(ctx, "standins", None) is None:
-        ctx.standins = Standins(tmp_path / "pubtest")
+def standins(pubtest_ctx, tmp_path) -> Standins:
+    if getattr(pubtest_ctx, "standins", None) is None:
+        pubtest_ctx.standins = Standins(tmp_path / "pubtest")
         previous = os.environ.get("PATH", "")
-        os.environ["PATH"] = ctx.standins.path()
+        os.environ["PATH"] = pubtest_ctx.standins.path()
 
-        @ctx.cleanup
+        @pubtest_ctx.cleanup
         def restore():
             os.environ["PATH"] = previous
-    return ctx.standins
+    return pubtest_ctx.standins
 
 
-def _refresh(ctx) -> None:
-    os.environ["PATH"] = ctx.standins.path()
+def _refresh(pubtest_ctx) -> None:
+    os.environ["PATH"] = pubtest_ctx.standins.path()
 
 
 @given(parsers.re(r'a stand-in "(?P<name>[^"]+)"'))
-def standin(ctx, tmp_path, name):
-    standins(ctx, tmp_path).add(name)
-    _refresh(ctx)
+def standin(pubtest_ctx, tmp_path, name):
+    standins(pubtest_ctx, tmp_path).add(name)
+    _refresh(pubtest_ctx)
 
 
 @given(parsers.parse('a stand-in "{name}" that prints "{text}"'))
-def standin_prints(ctx, tmp_path, name, text):
-    standins(ctx, tmp_path).add(name, out=text + "\n")
-    _refresh(ctx)
+def standin_prints(pubtest_ctx, tmp_path, name, text):
+    standins(pubtest_ctx, tmp_path).add(name, out=text + "\n")
+    _refresh(pubtest_ctx)
 
 
 @given(parsers.parse('a stand-in "{name}" that prints:'))
-def standin_prints_text(ctx, tmp_path, name, docstring):
-    standins(ctx, tmp_path).add(name, out=docstring + "\n")
-    _refresh(ctx)
+def standin_prints_text(pubtest_ctx, tmp_path, name, docstring):
+    standins(pubtest_ctx, tmp_path).add(name, out=docstring + "\n")
+    _refresh(pubtest_ctx)
 
 
 @given(parsers.parse('a stand-in "{name}" that fails, saying "{text}"'))
-def standin_fails(ctx, tmp_path, name, text):
-    standins(ctx, tmp_path).add(name, err=text + "\n", code=1)
-    _refresh(ctx)
+def standin_fails(pubtest_ctx, tmp_path, name, text):
+    standins(pubtest_ctx, tmp_path).add(name, err=text + "\n", code=1)
+    _refresh(pubtest_ctx)
 
 
 @given(parsers.parse('a stand-in "{name}" that answers in turn:'))
-def standin_turns(ctx, tmp_path, name, datatable):
+def standin_turns(pubtest_ctx, tmp_path, name, datatable):
     """A row per answer: args (a pattern, * for any), and optionally exit,
     stdout and stderr. A run takes the first matching answer not yet given,
     or the last that matches once all are given."""
@@ -143,43 +143,43 @@ def standin_turns(ctx, tmp_path, name, datatable):
             if answer.get(stream):
                 answer[stream] = answer[stream].replace("\\n", "\n") + "\n"
         answers.append(answer)
-    standins(ctx, tmp_path).add_turns(name, answers)
-    _refresh(ctx)
+    standins(pubtest_ctx, tmp_path).add_turns(name, answers)
+    _refresh(pubtest_ctx)
 
 
 @given("only stand-ins are installed")
-def only_standins(ctx, tmp_path):
-    standins(ctx, tmp_path).only = True
-    _refresh(ctx)
+def only_standins(pubtest_ctx, tmp_path):
+    standins(pubtest_ctx, tmp_path).only = True
+    _refresh(pubtest_ctx)
 
 
 @given(parsers.parse('"{name}" is not installed'))
-def not_installed(ctx, tmp_path, name):
-    found = standins(ctx, tmp_path)
+def not_installed(pubtest_ctx, tmp_path, name):
+    found = standins(pubtest_ctx, tmp_path)
     found.remove(name)
     found.only = True
-    _refresh(ctx)
+    _refresh(pubtest_ctx)
 
 
 @then(parsers.parse('"{name}" was run with "{args}"'))
-def run_with(ctx, name, args):
+def run_with(pubtest_ctx, name, args):
     import shlex  # noqa: PLC0415
-    runs = ctx.standins.runs(name)
+    runs = pubtest_ctx.standins.runs(name)
     assert shlex.split(args) in runs, f"{name} ran with {runs}"
 
 
 @then(parsers.parse('"{name}" was run {count:d} times'))
-def run_times(ctx, name, count):
-    assert len(ctx.standins.runs(name)) == count, f"{name} ran {len(ctx.standins.runs(name))} times"
+def run_times(pubtest_ctx, name, count):
+    assert len(pubtest_ctx.standins.runs(name)) == count, f"{name} ran {len(pubtest_ctx.standins.runs(name))} times"
 
 
 @then(parsers.parse('"{name}" was not run'))
-def not_run(ctx, name):
-    runs = ctx.standins.runs(name) if getattr(ctx, "standins", None) else []
+def not_run(pubtest_ctx, name):
+    runs = pubtest_ctx.standins.runs(name) if getattr(pubtest_ctx, "standins", None) else []
     assert not runs, f"{name} ran with {runs}"
 
 
 @then("nothing was run")
-def nothing_run(ctx):
-    runs = ctx.standins.runs() if getattr(ctx, "standins", None) else []
+def nothing_run(pubtest_ctx):
+    runs = pubtest_ctx.standins.runs() if getattr(pubtest_ctx, "standins", None) else []
     assert not runs, f"ran: {runs}"
