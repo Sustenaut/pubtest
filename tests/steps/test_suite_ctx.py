@@ -38,7 +38,7 @@ def still_there(ctx):
 def inner_run(pytester):
     pytester.makefile(".feature", inner=INNER_FEATURE)
     pytester.makepyfile(test_inner=INNER_STEPS)
-    pytester.makeini("[pytest]\nbdd_features_base_dir = .\naddopts = -p no:pubkit\n")
+    pytester.makeini("[pytest]\nbdd_features_base_dir = .\n")
     return pytester.runpytest()
 
 
