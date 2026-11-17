@@ -1,4 +1,0 @@
-{
-  "category": "fixed",
-  "change": "A suite with a ctx fixture of its own (a dict, as suites had under pubkit's plugin) keeps every pubtest step: the steps use pubtest_ctx, which is the suite's ctx only when it is pubtest's"
-}
