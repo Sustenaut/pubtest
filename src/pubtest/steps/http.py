@@ -23,62 +23,62 @@ def identity_header() -> str:
     return "X-Forwarded-Email"
 
 
-def _headers(ctx) -> dict:
-    if not hasattr(ctx, "headers"):
-        ctx.headers = {}
-    return ctx.headers
+def _headers(pubtest_ctx) -> dict:
+    if not hasattr(pubtest_ctx, "headers"):
+        pubtest_ctx.headers = {}
+    return pubtest_ctx.headers
 
 
 @given(parsers.parse('I am signed in as "{email}"'))
-def signed_in(ctx, identity_header, email):
-    _headers(ctx)[identity_header] = email
+def signed_in(pubtest_ctx, identity_header, email):
+    _headers(pubtest_ctx)[identity_header] = email
 
 
 @given("I am not signed in")
-def not_signed_in(ctx, identity_header):
-    _headers(ctx).pop(identity_header, None)
+def not_signed_in(pubtest_ctx, identity_header):
+    _headers(pubtest_ctx).pop(identity_header, None)
 
 
 @given(parsers.parse('requests come from "{origin}"'))
-def origin(ctx, origin):
-    _headers(ctx)["Origin"] = origin
+def origin(pubtest_ctx, origin):
+    _headers(pubtest_ctx)["Origin"] = origin
 
 
-def send(ctx, http_client, method: str, path: str, body: bytes | None = None, content_type: str | None = None):
-    headers = dict(_headers(ctx))
+def send(pubtest_ctx, http_client, method: str, path: str, body: bytes | None = None, content_type: str | None = None):
+    headers = dict(_headers(pubtest_ctx))
     if content_type:
         headers["Content-Type"] = content_type
-    ctx.acting()
-    ctx.answer = http_client(method, path, headers, body)
-    ctx.ran(Result(value=ctx.answer))
-    return ctx.answer
+    pubtest_ctx.acting()
+    pubtest_ctx.answer = http_client(method, path, headers, body)
+    pubtest_ctx.ran(Result(value=pubtest_ctx.answer))
+    return pubtest_ctx.answer
 
 
 @when(parsers.parse('I GET "{path}"'))
-def get(ctx, http_client, path):
-    send(ctx, http_client, "GET", path)
+def get(pubtest_ctx, http_client, path):
+    send(pubtest_ctx, http_client, "GET", path)
 
 
 @when(parsers.parse('I POST to "{path}" with:'))
-def post_json(ctx, http_client, path, docstring):
-    send(ctx, http_client, "POST", path, docstring.encode(), "application/json")
+def post_json(pubtest_ctx, http_client, path, docstring):
+    send(pubtest_ctx, http_client, "POST", path, docstring.encode(), "application/json")
 
 
 @when(parsers.parse('I POST to "{path}" with the form:'))
-def post_form(ctx, http_client, path, datatable):
+def post_form(pubtest_ctx, http_client, path, datatable):
     fields = {row[0]: row[1] for row in datatable[1:]} if datatable and datatable[0][:2] == ["field", "value"] \
         else {row[0]: row[1] for row in datatable}
-    send(ctx, http_client, "POST", path, urlencode(fields).encode(), "application/x-www-form-urlencoded")
+    send(pubtest_ctx, http_client, "POST", path, urlencode(fields).encode(), "application/x-www-form-urlencoded")
 
 
 @when(parsers.parse('I send "{method}" to "{path}"'))
-def send_method(ctx, http_client, method, path):
-    send(ctx, http_client, method, path)
+def send_method(pubtest_ctx, http_client, method, path):
+    send(pubtest_ctx, http_client, method, path)
 
 
-def _answer(ctx):
-    assert getattr(ctx, "answer", None) is not None, "no request was sent"
-    return ctx.answer
+def _answer(pubtest_ctx):
+    assert getattr(pubtest_ctx, "answer", None) is not None, "no request was sent"
+    return pubtest_ctx.answer
 
 
 def _show(answer) -> str:
@@ -86,48 +86,48 @@ def _show(answer) -> str:
 
 
 @then(parsers.parse("the answer is {status:d}"))
-def answer_is(ctx, status):
-    answer = _answer(ctx)
+def answer_is(pubtest_ctx, status):
+    answer = _answer(pubtest_ctx)
     assert answer.status == status, _show(answer)
 
 
 @then(parsers.parse('the answer\'s "{name}" is "{wanted}"'))
-def answer_header(ctx, name, wanted):
-    answer = _answer(ctx)
+def answer_header(pubtest_ctx, name, wanted):
+    answer = _answer(pubtest_ctx)
     assert answer.header(name) == wanted, _show(answer)
 
 
 @then(parsers.parse('the answer has no "{name}"'))
-def answer_no_header(ctx, name):
-    answer = _answer(ctx)
+def answer_no_header(pubtest_ctx, name):
+    answer = _answer(pubtest_ctx)
     assert answer.header(name) is None, _show(answer)
 
 
 @then(parsers.parse('the answer includes "{text}" once'))
-def answer_includes_once(ctx, text):
-    answer = _answer(ctx)
+def answer_includes_once(pubtest_ctx, text):
+    answer = _answer(pubtest_ctx)
     assert sum(1 for line in answer.text.splitlines() if text in line) == 1, _show(answer)
 
 
 @then(parsers.parse('the answer includes "{text}"'))
-def answer_includes(ctx, text):
-    answer = _answer(ctx)
+def answer_includes(pubtest_ctx, text):
+    answer = _answer(pubtest_ctx)
     assert text in answer.text, _show(answer)
 
 
 @then(parsers.parse('the answer does not include "{text}"'))
-def answer_excludes(ctx, text):
-    answer = _answer(ctx)
+def answer_excludes(pubtest_ctx, text):
+    answer = _answer(pubtest_ctx)
     assert text not in answer.text, _show(answer)
 
 
 @then("the answer is the JSON:")
-def answer_json(ctx, docstring):
-    answer = _answer(ctx)
+def answer_json(pubtest_ctx, docstring):
+    answer = _answer(pubtest_ctx)
     assert json.loads(answer.body) == json.loads(docstring), _show(answer)
 
 
 @then(parsers.parse('the answer redirects to "{path}"'))
-def answer_redirects(ctx, path):
-    answer = _answer(ctx)
+def answer_redirects(pubtest_ctx, path):
+    answer = _answer(pubtest_ctx)
     assert 300 <= answer.status < 400 and same(answer.header("Location"), path), _show(answer)

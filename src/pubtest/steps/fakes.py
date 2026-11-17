@@ -60,64 +60,64 @@ def _env_name(name: str) -> str:
     return "".join(c if c.isalnum() else "_" for c in name).upper() + "_URL"
 
 
-def fake(ctx, monkeypatch, name: str) -> Fake:
-    if not hasattr(ctx, "fakes"):
-        ctx.fakes = {}
-    if name not in ctx.fakes:
-        ctx.fakes[name] = Fake(name)
-        monkeypatch.setenv(_env_name(name), ctx.fakes[name].url)
-        ctx.cleanup(ctx.fakes[name].stop)
-    return ctx.fakes[name]
+def fake(pubtest_ctx, monkeypatch, name: str) -> Fake:
+    if not hasattr(pubtest_ctx, "fakes"):
+        pubtest_ctx.fakes = {}
+    if name not in pubtest_ctx.fakes:
+        pubtest_ctx.fakes[name] = Fake(name)
+        monkeypatch.setenv(_env_name(name), pubtest_ctx.fakes[name].url)
+        pubtest_ctx.cleanup(pubtest_ctx.fakes[name].stop)
+    return pubtest_ctx.fakes[name]
 
 
 @given(parsers.parse('a fake "{name}" service'))
-def fake_service(ctx, monkeypatch, name):
-    fake(ctx, monkeypatch, name)
+def fake_service(pubtest_ctx, monkeypatch, name):
+    fake(pubtest_ctx, monkeypatch, name)
 
 
 @given(parsers.parse('the "{name}" service answers "{request}" with {status:d}'))
-def answers(ctx, monkeypatch, name, request, status):
-    fake(ctx, monkeypatch, name).answer(request, status)
+def answers(pubtest_ctx, monkeypatch, name, request, status):
+    fake(pubtest_ctx, monkeypatch, name).answer(request, status)
 
 
 @given(parsers.parse('the "{name}" service answers "{request}" with {status:d} and:'))
-def answers_with(ctx, monkeypatch, name, request, status, docstring):
-    fake(ctx, monkeypatch, name).answer(request, status, docstring)
+def answers_with(pubtest_ctx, monkeypatch, name, request, status, docstring):
+    fake(pubtest_ctx, monkeypatch, name).answer(request, status, docstring)
 
 
 @given(parsers.parse('the answers recorded in "{directory}"'))
-def recorded(ctx, monkeypatch, directory):
+def recorded(pubtest_ctx, monkeypatch, directory):
     """Each JSON file in the directory, in name order, is one answer:
     {"service", "method", "path", "status", "body"}."""
-    base = (ctx.directory or Path.cwd()) / directory
+    base = (pubtest_ctx.directory or Path.cwd()) / directory
     if not base.exists():
         base = Path(directory)
-    ctx.recorded = []
+    pubtest_ctx.recorded = []
     for path in sorted(base.glob("*.json")):
         entry = json.loads(path.read_text(encoding="utf-8"))
         body = entry.get("body", "")
         body = body if isinstance(body, str) else json.dumps(body)
-        fake(ctx, monkeypatch, entry["service"]).answer(f"{entry['method']} {entry['path']}", entry["status"], body)
-        ctx.recorded.append(entry)
+        fake(pubtest_ctx, monkeypatch, entry["service"]).answer(f"{entry['method']} {entry['path']}", entry["status"], body)
+        pubtest_ctx.recorded.append(entry)
 
 
-def _asked(ctx, name: str) -> list[dict]:
-    fakes = getattr(ctx, "fakes", {})
+def _asked(pubtest_ctx, name: str) -> list[dict]:
+    fakes = getattr(pubtest_ctx, "fakes", {})
     assert name in fakes, f"there is no fake {name} service"
     return fakes[name].requests
 
 
 @then(parsers.parse('the "{name}" service was asked "{request}"'))
-def was_asked(ctx, name, request):
-    asked = [f"{r['method']} {r['path']}" for r in _asked(ctx, name)]
+def was_asked(pubtest_ctx, name, request):
+    asked = [f"{r['method']} {r['path']}" for r in _asked(pubtest_ctx, name)]
     assert request in asked or request in [a.split("?")[0] for a in asked], f"{name} was asked {asked}"
 
 
 @then(parsers.parse('the "{name}" service was sent:'))
-def was_sent(ctx, name, docstring):
+def was_sent(pubtest_ctx, name, docstring):
     want = json.loads(docstring)
     bodies = []
-    for request in _asked(ctx, name):
+    for request in _asked(pubtest_ctx, name):
         try:
             bodies.append(json.loads(request["body"]))
         except ValueError:
@@ -126,19 +126,19 @@ def was_sent(ctx, name, docstring):
 
 
 @then(parsers.parse('the "{name}" service was asked nothing'))
-def asked_nothing(ctx, name):
-    assert not _asked(ctx, name), f"{name} was asked {_asked(ctx, name)}"
+def asked_nothing(pubtest_ctx, name):
+    assert not _asked(pubtest_ctx, name), f"{name} was asked {_asked(pubtest_ctx, name)}"
 
 
 @then("nothing was sent")
-def nothing_sent(ctx):
-    sent = {name: f.requests for name, f in getattr(ctx, "fakes", {}).items() if f.requests}
+def nothing_sent(pubtest_ctx):
+    sent = {name: f.requests for name, f in getattr(pubtest_ctx, "fakes", {}).items() if f.requests}
     assert not sent, f"sent: {sent}"
 
 
 @then("every recorded answer was used")
-def recorded_used(ctx):
-    used = {f"{r['method']} {r['path']}" for f in getattr(ctx, "fakes", {}).values() for r in f.requests}
-    unused = [f"{e['method']} {e['path']}" for e in getattr(ctx, "recorded", [])
+def recorded_used(pubtest_ctx):
+    used = {f"{r['method']} {r['path']}" for f in getattr(pubtest_ctx, "fakes", {}).values() for r in f.requests}
+    unused = [f"{e['method']} {e['path']}" for e in getattr(pubtest_ctx, "recorded", [])
               if f"{e['method']} {e['path']}" not in used]
     assert not unused, f"not used: {unused}"

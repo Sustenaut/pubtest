@@ -29,58 +29,58 @@ def _show(result: Any) -> str:
 
 
 @given(parsers.parse('the program under test is "{name}"'))
-def under_test(ctx, name):
+def under_test(pubtest_ctx, name):
     try:
-        ctx.programs = {**getattr(ctx, "programs", {}), name: str(program(name))}
+        pubtest_ctx.programs = {**getattr(pubtest_ctx, "programs", {}), name: str(program(name))}
     except LookupError as e:
         pytest.fail(str(e))
 
 
-def run_command(ctx, command: str, stdin: str | None) -> Result:
+def run_command(pubtest_ctx, command: str, stdin: str | None) -> Result:
     """CMD's first word is the program under test of that name, from its
     _BIN_DIR, when a Given named it; otherwise it is found on PATH, stand-ins
     first. It runs for at most 120 seconds."""
     from ..plugin import run_program  # noqa: PLC0415
     argv = shlex.split(command)
-    argv[0] = getattr(ctx, "programs", {}).get(argv[0], argv[0])
+    argv[0] = getattr(pubtest_ctx, "programs", {}).get(argv[0], argv[0])
     env = {}
-    if getattr(ctx, "standins", None) is not None:
-        env["PATH"] = ctx.standins.path()
-    ctx.acting()
-    done = run_program(argv, stdin, ctx.directory or os.getcwd(), env, 120)
-    return ctx.ran(Result(code=done.code, stdout=done.stdout, stderr=done.stderr, argv=done.argv))
+    if getattr(pubtest_ctx, "standins", None) is not None:
+        env["PATH"] = pubtest_ctx.standins.path()
+    pubtest_ctx.acting()
+    done = run_program(argv, stdin, pubtest_ctx.directory or os.getcwd(), env, 120)
+    return pubtest_ctx.ran(Result(code=done.code, stdout=done.stdout, stderr=done.stderr, argv=done.argv))
 
 
 @when(parsers.parse('I run "{command}"'), target_fixture="result")
-def i_run(ctx, command):
-    return run_command(ctx, command, None)
+def i_run(pubtest_ctx, command):
+    return run_command(pubtest_ctx, command, None)
 
 
 @when(parsers.parse('I run "{command}" with the input:'), target_fixture="result")
-def i_run_with_input(ctx, command, docstring):
-    return run_command(ctx, command, docstring + "\n")
+def i_run_with_input(pubtest_ctx, command, docstring):
+    return run_command(pubtest_ctx, command, docstring + "\n")
 
 
-def _read(ctx) -> None:
+def _read(pubtest_ctx) -> None:
     """A step that reads the exit code reads a refusal too."""
-    ctx.refusal_read = True
+    pubtest_ctx.refusal_read = True
 
 
 @then("it succeeds")
-def it_succeeds(ctx, result):
-    _read(ctx)
+def it_succeeds(pubtest_ctx, result):
+    _read(pubtest_ctx)
     assert _code(result) == 0, _show(result)
 
 
 @then("it fails")
-def it_fails(ctx, result):
-    _read(ctx)
+def it_fails(pubtest_ctx, result):
+    _read(pubtest_ctx)
     assert _code(result) != 0, _show(result)
 
 
 @then(parsers.parse("the exit code is {code:d}"))
-def exit_code_is(ctx, result, code):
-    _read(ctx)
+def exit_code_is(pubtest_ctx, result, code):
+    _read(pubtest_ctx)
     assert _code(result) == code, _show(result)
 
 

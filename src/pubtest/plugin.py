@@ -41,16 +41,37 @@ pytest_plugins = [
 ]
 
 
-@pytest.fixture
-def ctx() -> Any:
-    context = Context()
-    yield context
+def _finish(context: Context) -> None:
     try:
         unread = context.unread_refusal()
         if unread is not None:
             raise AssertionError(f"the action was refused, and no step read it: {unread!r}") from unread
     finally:
         context.close()
+
+
+@pytest.fixture
+def ctx() -> Any:
+    """The scenario's context, which a suite's own steps reach as `ctx`. A
+    suite may replace it with a fixture of its own; pubtest's steps then keep
+    theirs apart (`pubtest_ctx`)."""
+    context = Context()
+    yield context
+    _finish(context)
+
+
+@pytest.fixture
+def pubtest_ctx(request) -> Any:
+    """The context pubtest's own steps use: the suite's `ctx` when it is
+    pubtest's, and otherwise one of their own, so a suite whose `ctx` is
+    something else (a dict, say) loses none of the steps."""
+    suite = request.getfixturevalue("ctx")
+    if isinstance(suite, Context):
+        yield suite
+        return
+    context = Context()
+    yield context
+    _finish(context)
 
 
 @pytest.fixture(scope="session")
