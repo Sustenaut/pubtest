@@ -1,0 +1,4 @@
+{
+  "category": "changed",
+  "change": "Hypothesis's examples per property come from PUBRULES_FUZZ_RUNS, which pubrules' CI sets, in place of PUBKIT_FUZZ_RUNS, and run under a profile named pubrules; pubtest no longer refuses to load beside pubkit's old pytest plugin, which pubkit 0.42.0 dropped"
+}

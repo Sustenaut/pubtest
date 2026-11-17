@@ -88,18 +88,18 @@ for name in RELEASE_APP_ID RELEASE_APP_KEY; do
 done
 echo "   The sustenaut-release app is installed on every repository of $owner, so nothing more is needed for it."
 
-step "4. Rulesets: ./pubkit protect, once main's CI passes"
-if ./pubkit protect --check >/dev/null 2>&1; then
-  skip "$slug's rulesets match pubkit.json"
+step "4. Rulesets: ./pubrules protect, once main's CI passes"
+if ./pubrules protect --check >/dev/null 2>&1; then
+  skip "$slug's rulesets match pubrules.json"
 else
   run=$(gh run list --repo "$slug" --branch main --workflow main.yml --limit 1 --json conclusion -q '.[0].conclusion // ""')
   if [ "$run" != success ]; then
     echo "   main's last CI run is '${run:-none}': merge the 0.1 pull request, let main pass, then run this again."
     exit 1
   fi
-  ./pubkit protect --check || true
-  ask "Put pubkit's rulesets on $slug?"
-  ./pubkit protect
+  ./pubrules protect --check || true
+  ask "Put pubrules's rulesets on $slug?"
+  ./pubrules protect
 fi
 
 step "Done. Next: pubrel prepare in this checkout cuts 0.1.0."

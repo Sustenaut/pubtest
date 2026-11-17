@@ -13,7 +13,7 @@ A scenario sets something up, takes one action, and checks what came of it.
 Scenario: A check with a value it may not show is refused
   Given a scratch directory
   And the secret "canary-7f3e"
-  And a file "pubkit.json" holding:
+  And a file "pubrules.json" holding:
     """
     {"kind": "service", "deploy": {"token": "canary-7f3e"}}
     """
@@ -34,7 +34,7 @@ Scenario: A check with a value it may not show is refused
   and the programs run. They are all pubtest's, so a check reads the same in
   every repository.
 
-A scenario has at least one When (pubkit's TEST-04), however many Givens and
+A scenario has at least one When (pubrules's TEST-04), however many Givens and
 Thens it needs. Its action may be a chain (`When I run … And the file "P"
 changes to: … And I run …`): an edit between two runs is one action. More
 steps of pubtest's are better than one step of the suite's that does the

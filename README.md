@@ -17,7 +17,7 @@ quickpickle, so a step means the same in Python and in Node.
 
 ## Python
 
-pubkit's managed `tests/requirements-pubkit.txt` pins pubtest for every
+pubrules's managed `tests/requirements-pubrules.txt` pins pubtest for every
 repository, so a suite only writes steps:
 
 ```python
@@ -41,7 +41,7 @@ Scenario: A week with no work is refused
 Besides the steps, the plugin gives a suite `ctx` (the scenario's context:
 `attempt`, `cleanup`, the result), `binary(name)` (a program under test from
 `<NAME>_BIN_DIR`, never PATH), `run(...)`, a marker for every `@tag` in the
-feature files, and Hypothesis's examples per property from `PUBKIT_FUZZ_RUNS`.
+feature files, and Hypothesis's examples per property from `PUBRULES_FUZZ_RUNS`.
 A suite that tests a service gives pubtest its client:
 
 ```python
