@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 from pytest_bdd import parsers, then
 
-from ..core import dig, includes, same, show
+from ..core import dig, includes, matches, same, show
 
 
 @pytest.fixture
@@ -100,3 +100,11 @@ def refused(pubtest_ctx):
 def not_refused(pubtest_ctx):
     pubtest_ctx.refusal_read = True
     assert pubtest_ctx.refused is None, f"it was refused, saying {pubtest_ctx.refused.message!r}"
+
+
+@then(parsers.parse('the result matches "{pattern}"'))
+def result_matches(pubtest_ctx, pattern):
+    """The result is text, and all of it is the pattern (`*` for anything)."""
+    got = _returned(pubtest_ctx)
+    assert isinstance(got, str), f"the result is {show(got)}, not text"
+    assert matches(pattern, got), f"the result {got!r} does not match {pattern!r}"

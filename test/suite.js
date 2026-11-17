@@ -5,6 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { produced } from "../js/index.js";
+import { STEPS } from "../js/steps.js";
 
 process.env.GREET_BIN_DIR ??= path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "tests", "bin");
 
@@ -14,14 +15,22 @@ export async function app(request) {
   const who = request.headers.get("x-forwarded-email");
   const text = (status, body, headers = {}) => new Response(body, { status, headers: { "content-type": "text/plain", ...headers } });
   if (url.pathname === "/hello") return who ? text(200, `hello, ${who}`) : text(403, "sign in");
-  if (url.pathname === "/echo" && request.method === "POST") {
+  if (url.pathname === "/echo" && ["POST", "PUT"].includes(request.method)) {
     return new Response(JSON.stringify({ echo: await request.json() }), { headers: { "content-type": "application/json" } });
   }
   if (url.pathname === "/form" && request.method === "POST") {
     return text(200, [...new URLSearchParams(await request.text())].map(([k, v]) => `${k}=${v}`).join("&"));
   }
   if (url.pathname === "/old") return new Response("", { status: 302, headers: { location: "/new" } });
-  if (url.pathname === "/forecast") return text(200, await (await fetch(`${process.env.WEATHER_URL}/today`)).text());
+  if (url.pathname === "/forecast") {
+    const asked = await fetch(`${process.env.WEATHER_URL}/today`, { headers: { "x-client": "pubtest-app" } });
+    const sky = asked.headers.get("x-sky");
+    return text(200, await asked.text(), sky ? { "x-sky": sky } : {});
+  }
+  if (url.pathname === "/upload") {
+    const body = new Uint8Array(await request.arrayBuffer());
+    return text(200, `${request.method} ${request.headers.get("content-type") ?? "-"} ${body.length} ${request.headers.get("x-token") ?? "-"}`);
+  }
   return text(404, "");
 }
 
@@ -54,6 +63,10 @@ export function suite(define) {
     console.log("ok");
   }
 
+  define("When", "I copy {string} from the repository", function (src) {
+    const [, , copy] = STEPS.find(([, expression]) => expression === "a file {string} copied from {string}");
+    return this.attempt(() => copy(this.pubtest, "copy", src));
+  });
   define("When", "I run main with {string}", function (args) { return this.attempt(() => main(args.split(" "))); });
 
   define("Then", "the secret is found in {string}", function (where) {

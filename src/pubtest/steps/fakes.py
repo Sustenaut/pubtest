@@ -15,7 +15,7 @@ class Fake:
 
     def __init__(self, name: str) -> None:
         self.name = name
-        self.answers: dict[str, list[tuple[int, str]]] = {}
+        self.answers: dict[str, list[tuple[int, str, dict]]] = {}
         self.requests: list[dict] = []
         fake = self
 
@@ -27,12 +27,14 @@ class Fake:
                 fake.requests.append({"method": self.command, "path": self.path, "body": body,
                                       "headers": dict(self.headers)})
                 queue = fake.answers.get(key) or fake.answers.get(f"{self.command} {self.path.split('?')[0]}")
-                status, text = (queue.pop(0) if len(queue) > 1 else queue[0]) if queue else (404, "")
+                status, text, headers = (queue.pop(0) if len(queue) > 1 else queue[0]) if queue else (404, "", {})
                 data = text.encode()
                 self.send_response(status)
                 self.send_header("Content-Length", str(len(data)))
-                if text.lstrip().startswith(("{", "[")):
+                if text.lstrip().startswith(("{", "[")) and "content-type" not in {k.lower() for k in headers}:
                     self.send_header("Content-Type", "application/json")
+                for name, value in headers.items():
+                    self.send_header(name, value)
                 self.end_headers()
                 self.wfile.write(data)
 
@@ -48,8 +50,8 @@ class Fake:
     def url(self) -> str:
         return f"http://127.0.0.1:{self.server.server_address[1]}"
 
-    def answer(self, request: str, status: int, body: str = "") -> None:
-        self.answers.setdefault(request, []).append((status, body))
+    def answer(self, request: str, status: int, body: str = "", headers: dict | None = None) -> None:
+        self.answers.setdefault(request, []).append((status, body, headers or {}))
 
     def stop(self) -> None:
         self.server.shutdown()
@@ -85,6 +87,11 @@ def answers_with(pubtest_ctx, monkeypatch, name, request, status, docstring):
     fake(pubtest_ctx, monkeypatch, name).answer(request, status, docstring)
 
 
+@given(parsers.parse('the "{name}" service answers "{request}" with {status:d} and the header "{header}" set to "{value}"'))
+def answers_with_header(pubtest_ctx, monkeypatch, name, request, status, header, value):
+    fake(pubtest_ctx, monkeypatch, name).answer(request, status, "", {header: value})
+
+
 @given(parsers.parse('the answers recorded in "{directory}"'))
 def recorded(pubtest_ctx, monkeypatch, directory):
     """Each JSON file in the directory, in name order, is one answer:
@@ -107,10 +114,30 @@ def _asked(pubtest_ctx, name: str) -> list[dict]:
     return fakes[name].requests
 
 
-@then(parsers.parse('the "{name}" service was asked "{request}"'))
+@then(parsers.re(r'the "(?P<name>[^"]+)" service was asked "(?P<request>[^"]+)"'))
 def was_asked(pubtest_ctx, name, request):
     asked = [f"{r['method']} {r['path']}" for r in _asked(pubtest_ctx, name)]
     assert request in asked or request in [a.split("?")[0] for a in asked], f"{name} was asked {asked}"
+
+
+def _requests(pubtest_ctx, name: str, request: str) -> list[dict]:
+    """The requests `name` was asked that are `request`, "METHOD PATH", its
+    query left out unless `request` names one."""
+    return [r for r in _asked(pubtest_ctx, name)
+            if request in (f"{r['method']} {r['path']}", f"{r['method']} {r['path'].split('?')[0]}")]
+
+
+@then(parsers.parse('the "{name}" service was asked "{request}" {count:d} times'))
+def asked_times(pubtest_ctx, name, request, count):
+    found = _requests(pubtest_ctx, name, request)
+    assert len(found) == count, f"{name} was asked {request} {len(found)} times"
+
+
+@then(parsers.parse('the "{name}" service was asked "{request}" with the header "{header}" set to "{value}"'))
+def asked_with_header(pubtest_ctx, name, request, header, value):
+    found = _requests(pubtest_ctx, name, request)
+    seen = [{k.lower(): v for k, v in r["headers"].items()}.get(header.lower()) for r in found]
+    assert value in seen, f"{name} was asked {request} with {header} {seen}"
 
 
 @then(parsers.parse('the "{name}" service was sent:'))

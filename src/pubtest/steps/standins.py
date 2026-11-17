@@ -39,8 +39,9 @@ sys.exit(int(answer.get("exit", 0)))
 
 STANDIN = '''#!{python}
 import json, sys
+read = sys.stdin.read() if {reads!r} else None
 with open({log!r}, "a", encoding="utf-8") as log:
-    log.write(json.dumps({{"name": {name!r}, "args": sys.argv[1:]}}) + "\\n")
+    log.write(json.dumps({{"name": {name!r}, "args": sys.argv[1:], "input": read}}) + "\\n")
 sys.stdout.write({out!r})
 sys.stderr.write({err!r})
 sys.exit({code})
@@ -58,10 +59,10 @@ class Standins:
         self.only = False
         self.basic = root / "basic"
 
-    def add(self, name: str, out: str = "", err: str = "", code: int = 0) -> None:
+    def add(self, name: str, out: str = "", err: str = "", code: int = 0, reads: bool = False) -> None:
         path = self.bin / name
         path.write_text(STANDIN.format(python=sys.executable, log=str(self.log), name=name, out=out, err=err,
-                                       code=code), encoding="utf-8")
+                                       code=code, reads=reads), encoding="utf-8")
         path.chmod(0o755)
 
     def add_turns(self, name: str, answers: list[dict]) -> None:
@@ -85,9 +86,15 @@ class Standins:
                 (self.basic / tool).symlink_to(found)
         return f"{self.bin}{os.pathsep}{self.basic}"
 
-    def runs(self, name: str | None = None) -> list[list[str]]:
+    def entries(self, name: str | None = None) -> list[dict]:
         entries = [json.loads(line) for line in self.log.read_text(encoding="utf-8").splitlines() if line]
-        return [e["args"] for e in entries if name is None or e["name"] == name]
+        return [e for e in entries if name is None or e["name"] == name]
+
+    def runs(self, name: str | None = None) -> list[list[str]]:
+        return [e["args"] for e in self.entries(name)]
+
+    def inputs(self, name: str) -> list[str]:
+        return [e["input"] for e in self.entries(name) if e.get("input") is not None]
 
 
 def standins(pubtest_ctx, tmp_path) -> Standins:
@@ -147,6 +154,14 @@ def standin_turns(pubtest_ctx, tmp_path, name, datatable):
     _refresh(pubtest_ctx)
 
 
+@given(parsers.parse('a stand-in "{name}" that reads its input'))
+def standin_reads(pubtest_ctx, tmp_path, name):
+    """Reads its standard input to the end, as `kubectl apply -f -` does, and
+    keeps it for `read the input`. Only a stand-in that reads waits for it."""
+    standins(pubtest_ctx, tmp_path).add(name, reads=True)
+    _refresh(pubtest_ctx)
+
+
 @given("only stand-ins are installed")
 def only_standins(pubtest_ctx, tmp_path):
     standins(pubtest_ctx, tmp_path).only = True
@@ -183,3 +198,22 @@ def not_run(pubtest_ctx, name):
 def nothing_run(pubtest_ctx):
     runs = pubtest_ctx.standins.runs() if getattr(pubtest_ctx, "standins", None) else []
     assert not runs, f"ran: {runs}"
+
+
+@then(parsers.parse('"{name}" was run with arguments matching "{pattern}"'))
+def run_matching(pubtest_ctx, name, pattern):
+    from ..core import matches  # noqa: PLC0415
+    runs = pubtest_ctx.standins.runs(name)
+    assert any(matches(pattern, " ".join(args)) for args in runs), f"{name} ran with {runs}"
+
+
+@then(parsers.parse('"{name}" read the input:'))
+def read_input(pubtest_ctx, name, docstring):
+    inputs = pubtest_ctx.standins.inputs(name)
+    assert docstring.removesuffix("\n") in [i.removesuffix("\n") for i in inputs], f"{name} read {inputs}"
+
+
+@then(parsers.parse('"{name}" read input including "{text}"'))
+def read_input_including(pubtest_ctx, name, text):
+    inputs = pubtest_ctx.standins.inputs(name)
+    assert any(text in i for i in inputs), f"{name} read {inputs}"

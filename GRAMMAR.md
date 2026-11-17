@@ -85,6 +85,9 @@ holds for `includes` and `the result's "K" is "V"`. A dotted key indexes maps
 by name and lists by number (`people.0.name`). A docstring (`"""`) or a table
 carries anything longer. Paths are relative to the scratch directory.
 
+The YAML steps read YAML with PyYAML in Python and the `yaml` package in
+Node, which a suite that uses them installs; pubtest itself needs neither.
+
 ### The result
 
 | Step | Checks |
@@ -101,6 +104,12 @@ carries anything longer. Paths are relative to the scratch directory.
 | `Then it is refused, saying "T"` | the action raised, and its message contains T |
 | `Then it is refused` | the action raised |
 | `Then it is not refused` | the action returned |
+| `Then the result matches "P"` | the result is text, and all of it is the pattern P (below) |
+
+A **pattern** is literal text in which only `*` is special: it stands for
+anything, newlines too, and the pattern must match the whole text (a whole
+line, in the line steps). It reads the same in Python and in Node, as a
+regular expression would not.
 
 ### Files
 
@@ -111,6 +120,7 @@ carries anything longer. Paths are relative to the scratch directory.
 | `Given a file "P" holding:` + docstring | writes the text |
 | `Given the file "P" is executable` | sets its mode so it runs |
 | `Given the file "P" is removed` | deletes it, or a directory and what it holds |
+| `Given a file "P" copied from "SRC"` | copies a file or a directory of the repository (the nearest directory holding pubrules.json, from where the suite started) to P: a fixture kept beside the suite. A SRC that is absolute, or that leads out of the repository, is refused |
 | `When the file "P" changes to:` + docstring | rewrites it, as a person would between two runs |
 | `Then the file "P" exists` / `does not exist` | |
 | `Then the file "P" holds "T"` | its whole text, less a final newline, is T |
@@ -119,6 +129,10 @@ carries anything longer. Paths are relative to the scratch directory.
 | `Then the file "P" includes "T" once` | exactly one line holds T |
 | `Then the JSON in "P" is:` + docstring | the file parses to the JSON given |
 | `Then the JSON in "P" has "K" equal to "V"` | the value at the dotted key K |
+| `Then the YAML in "P" is:` + docstring | the file's YAML is the docstring's (YAML or JSON); a file of several documents is the list of them |
+| `Then the YAML in "P" has "K" equal to "V"` | the value at the dotted key K; in a file of several documents, K starts with the document's number (`1.spec.replicas`) |
+| `Then the file "P" can be run` | it is executable (a Then's words differ from the Given's `is executable`) |
+| `Then the directory "D" holds:` + docstring | the names in D, one a line, in name order; a directory's ends with `/` |
 | `Then nothing was written` | no file in the scratch directory was made, changed or removed since the first When |
 
 ### The environment
@@ -141,6 +155,10 @@ carries anything longer. Paths are relative to the scratch directory.
 | `Then it prints:` + docstring | stdout is the docstring |
 | `Then stdout is empty` | |
 | `Then stderr mentions "T"` / `stderr does not mention "T"` | |
+| `Then it prints the JSON:` + docstring | stdout reads as JSON, and is the docstring's |
+| `Then the JSON it prints has "K" equal to "V"` | the value at the dotted key K of what stdout reads as |
+| `Then it prints a line matching "P"` | some line of stdout is the pattern P |
+| `Then stderr has a line matching "P"` | some line of stderr is the pattern P |
 
 ### Stand-in programs
 
@@ -155,9 +173,13 @@ gcloud without reaching them.
 | `Given a stand-in "NAME" that prints:` + docstring | |
 | `Given a stand-in "NAME" that fails, saying "T"` | exits 1 with T on stderr |
 | `Given a stand-in "NAME" that answers in turn:` + table | a row per answer: `args` (a pattern in which only `*` is special, for anything), and optionally `exit`, `stdout`, `stderr`. A run takes the first matching answer not given yet, or the last matching one once all are given |
+| `Given a stand-in "NAME" that reads its input` | succeeds, prints nothing, and reads its standard input to the end, as `kubectl apply -f -` does. Only a stand-in that reads waits for its input |
 | `Given only stand-ins are installed` | PATH holds the stand-ins and these tools alone, so any other program is missing: sh, bash, env, cat, echo, printf, mkdir, rm, cp, mv, chmod, ls, sed, grep, head, tail, tr, cut, sort, uniq, wc, dirname, basename, mktemp, date, sleep, true, false, test, touch, readlink, realpath, id, uname |
 | `Given "NAME" is not installed` | |
 | `Then "NAME" was run with "ARGS"` | some run had exactly these arguments |
+| `Then "NAME" was run with arguments matching "P"` | some run's arguments, joined by spaces, are the pattern P |
+| `Then "NAME" read the input:` + docstring | some run of a stand-in that reads read exactly this |
+| `Then "NAME" read input including "T"` | |
 | `Then "NAME" was run N times` | |
 | `Then "NAME" was not run` | |
 | `Then nothing was run` | no stand-in ran |
@@ -180,10 +202,13 @@ dependency, so a suite that tests no service installs nothing for them.
 | `Given I am signed in as "EMAIL"` | sends the email in the identity header (X-Forwarded-Email unless the suite names another) |
 | `Given I am not signed in` | |
 | `Given requests come from "ORIGIN"` | sets Origin |
+| `Given requests carry the header "H" set to "V"` | on every request after it |
 | `When I GET "PATH"` | the answer is the result |
 | `When I POST to "PATH" with:` + docstring | a JSON body |
 | `When I POST to "PATH" with the form:` + table | a form body |
 | `When I send "METHOD" to "PATH"` | |
+| `When I send "METHOD" to "PATH" with:` + docstring | a JSON body, by any method |
+| `When I send "METHOD" to "PATH" with the file "P"` | the file's bytes, as `application/octet-stream` unless a Given set the Content-Type |
 | `Then the answer is N` | the status |
 | `Then the answer's "H" is "V"` | a header |
 | `Then the answer has no "H"` | |
@@ -199,7 +224,10 @@ dependency, so a suite that tests no service installs nothing for them.
 | `Given a fake "NAME" service` | an HTTP server on 127.0.0.1, its address in `NAME_URL` for the scenario, that answers 404 to anything it was not told |
 | `Given the "NAME" service answers "METHOD PATH" with N` | |
 | `Given the "NAME" service answers "METHOD PATH" with N and:` + docstring | the body |
+| `Given the "NAME" service answers "METHOD PATH" with N and the header "H" set to "V"` | |
 | `Then the "NAME" service was asked "METHOD PATH"` | |
+| `Then the "NAME" service was asked "METHOD PATH" N times` | |
+| `Then the "NAME" service was asked "METHOD PATH" with the header "H" set to "V"` | some such request carried it |
 | `Then the "NAME" service was sent:` + docstring | some request's body was this JSON |
 | `Then the "NAME" service was asked nothing` | |
 | `Then nothing was sent` | no fake service was asked anything |
@@ -220,17 +248,25 @@ dependency, so a suite that tests no service installs nothing for them.
 
 ### Git
 
-| Step | Does |
+| Step | Does or checks |
 | --- | --- |
 | `Given a git repository` | in the scratch directory, with one commit on main |
 | `Given a commit tagged "T"` | commits what is there and tags it |
 | `Given the branch "B"` | made at the current commit, and checked out |
+| `Given everything is committed with the message "T"` | |
+| `Given a bare remote "NAME"` | a bare repository outside the scratch directory, added as the remote NAME, with the current branch pushed to it |
+| `Then the last commit's message includes "T"` | |
+| `Then the working tree is clean` | nothing changed or untracked |
+| `Then the tag "T" exists` | |
+| `Then the remote "NAME" has the branch "B"` | |
 
 ## What a suite writes itself
 
 - Givens for its own domain, in this voice: "a publication with two
   objects", not "the fixture publication_two is loaded".
 - Its own When, through `attempt`, for an action pubtest has no step for.
+  A frozen clock and a Worker's scheduled event are the suite's own too,
+  since each project reads the time and is scheduled its own way.
 - Nothing else. A suite step that checks a result is a pubtest step that is
   missing: propose it here first.
 

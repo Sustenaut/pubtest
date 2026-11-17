@@ -13,7 +13,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-__all__ = ["Completed", "Context", "Refused", "Result", "bin_var", "dig", "same", "value"]
+__all__ = ["Completed", "Context", "Refused", "Result", "bin_var", "dig", "matches", "repository", "same", "value"]
 
 
 @dataclass(frozen=True)
@@ -235,6 +235,34 @@ def includes(container: Any, item: str) -> bool:
     if isinstance(container, dict):
         return want in container or item in container
     return want in container or item in [str(x) for x in container]
+
+
+def matches(pattern: str, text: str) -> bool:
+    """Whether all of `text` is `pattern`, in which only `*` is special: it
+    stands for anything, newlines too. The same in Python and in Node."""
+    return re.fullmatch(".*".join(map(re.escape, pattern.split("*"))), text, re.S) is not None
+
+
+def repository(start: Path | None = None) -> Path:
+    """The repository the suite runs in: the nearest directory, from `start`
+    (the working directory) up, that holds pubrules.json, or else `start`."""
+    here = (start or Path.cwd()).resolve()
+    for directory in [here, *here.parents]:
+        if (directory / "pubrules.json").is_file():
+            return directory
+    return here
+
+
+def yaml_documents(text: str) -> Any:
+    """A YAML text's document, or the list of its documents when it holds
+    more than one. PyYAML is the suite's to install: pubtest needs it only
+    for the YAML steps."""
+    try:
+        import yaml  # noqa: PLC0415
+    except ImportError as e:
+        raise AssertionError("the YAML steps need PyYAML: add pyyaml to the suite's requirements") from e
+    documents = [d for d in yaml.safe_load_all(text) if d is not None]
+    return documents[0] if len(documents) == 1 else documents
 
 
 def show(data: Any) -> str:

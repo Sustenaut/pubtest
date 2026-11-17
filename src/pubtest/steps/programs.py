@@ -9,7 +9,9 @@ from typing import Any
 import pytest
 from pytest_bdd import given, parsers, then, when
 
-from ..core import Completed, Result, program
+import json
+
+from ..core import Completed, Result, dig, matches, program, same, show
 
 
 def _text(result: Any, stream: str) -> str:
@@ -112,3 +114,34 @@ def stderr_mentions(result, text):
 @then(parsers.parse('stderr does not mention "{text}"'))
 def stderr_does_not_mention(result, text):
     assert text not in _text(result, "stderr"), _show(result)
+
+
+def _printed_json(result: Any) -> Any:
+    try:
+        return json.loads(_text(result, "stdout"))
+    except ValueError as e:
+        raise AssertionError(f"it printed no JSON\n{_show(result)}") from e
+
+
+@then("it prints the JSON:")
+def it_prints_json(result, docstring):
+    got = _printed_json(result)
+    assert same(got, docstring), f"it printed {show(got)}, not:\n{docstring}"
+
+
+@then(parsers.parse('the JSON it prints has "{key}" equal to "{wanted}"'))
+def printed_json_key(result, key, wanted):
+    got = dig(_printed_json(result), key)
+    assert same(got, wanted), f"the {key} it printed is {show(got)}, not {wanted}"
+
+
+@then(parsers.parse('it prints a line matching "{pattern}"'))
+def prints_line_matching(result, pattern):
+    lines = _text(result, "stdout").splitlines()
+    assert any(matches(pattern, line) for line in lines), f"no line matches {pattern!r}\n{_show(result)}"
+
+
+@then(parsers.parse('stderr has a line matching "{pattern}"'))
+def stderr_line_matching(result, pattern):
+    lines = _text(result, "stderr").splitlines()
+    assert any(matches(pattern, line) for line in lines), f"no line of stderr matches {pattern!r}\n{_show(result)}"
