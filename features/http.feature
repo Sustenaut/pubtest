@@ -54,3 +54,29 @@ Feature: HTTP: requests to the service under test, and fake services it calls
     When I GET "/hello"
     Then the "weather" service was asked nothing
     And nothing was sent
+
+  Scenario: How a fake service was asked, and a header it answers with
+    Given a fake "weather" service
+    And the "weather" service answers "GET /today" with 200 and the header "X-Sky" set to "clear"
+    When I GET "/forecast"
+    Then the answer's "X-Sky" is "clear"
+    And the "weather" service was asked "GET /today" 1 times
+    And the "weather" service was asked "GET /today" with the header "X-Client" set to "pubtest-app"
+
+  Scenario: A file's bytes, by any method, with a header the requests carry
+    Given requests carry the header "X-Token" set to "t-1"
+    And a scratch directory
+    And a file "photo.bin" holding "not really a photo"
+    When I send "PUT" to "/upload" with the file "photo.bin"
+    Then the answer is 200
+    And the answer includes "PUT application/octet-stream 19 t-1"
+
+  Scenario: A JSON body, by any method
+    When I send "PUT" to "/echo" with:
+      """
+      {"a": 2}
+      """
+    Then the answer is the JSON:
+      """
+      {"echo": {"a": 2}}
+      """

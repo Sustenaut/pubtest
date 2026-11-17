@@ -59,3 +59,8 @@ Feature: The result: what an action came to, checked in the same words everywher
     Then it is refused, saying "no such option: --bad"
     And the exit code is 2
     And stderr mentions "usage:"
+
+  Scenario: A text result matched
+    When I give back the text "build 42 passed"
+    Then the result matches "build * passed"
+    And the result matches "*"

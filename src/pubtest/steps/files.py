@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import stat
 from pathlib import Path
 
+import pytest
 from pytest_bdd import given, parsers, then, when
 
-from ..core import dig, files_in, same, show
+from ..core import dig, files_in, repository, same, show, yaml_documents
 
 
 def at(pubtest_ctx, path: str) -> Path:
@@ -38,6 +40,24 @@ def holds_line(pubtest_ctx, path, text):
 @given(parsers.parse('a file "{path}" holding:'))
 def holds_text(pubtest_ctx, path, docstring):
     _write(pubtest_ctx, path, docstring + "\n")
+
+
+@pytest.fixture(scope="session")
+def pubtest_repository(request) -> Path:
+    """The repository the suite runs in, which `copied from` paths are in."""
+    return repository(Path(request.config.invocation_params.dir))
+
+
+@given(parsers.parse('a file "{path}" copied from "{source}"'))
+def copied(pubtest_ctx, pubtest_repository, path, source):
+    origin = pubtest_repository / source
+    assert origin.exists(), f"the repository has no {source}"
+    target = at(pubtest_ctx, path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if origin.is_dir():
+        shutil.copytree(origin, target, dirs_exist_ok=True)
+    else:
+        shutil.copyfile(origin, target)
 
 
 @given(parsers.parse('the file "{path}" is executable'))
@@ -122,3 +142,33 @@ def nothing_written(pubtest_ctx):
     assert not changed, f"written: {', '.join(changed)}"
 
 
+
+
+@then(parsers.parse('the file "{path}" can be run'))
+def can_be_run(pubtest_ctx, path):
+    target = at(pubtest_ctx, path)
+    assert target.is_file(), f"there is no {path}"
+    assert os.access(target, os.X_OK), f"{path} is not executable"
+
+
+@then(parsers.parse('the directory "{path}" holds:'))
+def directory_holds(pubtest_ctx, path, docstring):
+    """The names in the directory, one a line, in name order; a directory's
+    ends with a slash."""
+    target = at(pubtest_ctx, path)
+    assert target.is_dir(), f"there is no directory {path}"
+    names = sorted(p.name + ("/" if p.is_dir() else "") for p in target.iterdir())
+    want = [line.strip() for line in docstring.splitlines() if line.strip()]
+    assert names == want, f"{path} holds:\n" + "\n".join(names)
+
+
+@then(parsers.parse('the YAML in "{path}" is:'))
+def yaml_is(pubtest_ctx, path, docstring):
+    got, want = yaml_documents(_text(pubtest_ctx, path)), yaml_documents(docstring)
+    assert got == want, f"{path} holds {show(got)}"
+
+
+@then(parsers.parse('the YAML in "{path}" has "{key}" equal to "{wanted}"'))
+def yaml_key(pubtest_ctx, path, key, wanted):
+    got = dig(yaml_documents(_text(pubtest_ctx, path)), key)
+    assert same(got, wanted), f"{path}'s {key} is {show(got)}, not {wanted}"

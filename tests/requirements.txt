@@ -2,3 +2,4 @@
 # set with hashes lives in requirements.lock. Regenerate it with `pubrules lock`.
 -r requirements-pubrules.txt
 coverage==7.16.2
+pyyaml==6.0.3

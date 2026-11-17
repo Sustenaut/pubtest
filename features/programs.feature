@@ -38,3 +38,21 @@ Feature: Programs, run as a person runs them
     And the environment does not set "HOME_GREETING"
     When I run "sh -c 'echo $GREETING ${HOME_GREETING:-none}'"
     Then it prints "hi none"
+
+  Scenario: Output as JSON
+    Given a file "out.json" holding:
+      """
+      {"kind": "service", "tags": ["a", "b"]}
+      """
+    When I run "cat out.json"
+    Then it prints the JSON:
+      """
+      {"tags": ["a", "b"], "kind": "service"}
+      """
+    And the JSON it prints has "tags.1" equal to "b"
+
+  Scenario: Lines matched, on stdout and stderr
+    Given a file "log.txt" holding "released v1.2.3 at 12:00"
+    When I run "sh -c 'cat log.txt; echo warning: disk 91% full >&2'"
+    Then it prints a line matching "released v* at *"
+    And stderr has a line matching "warning: * full"

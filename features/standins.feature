@@ -41,3 +41,21 @@ Feature: Stand-in programs in place of real ones
     Given a stand-in "kubectl"
     When I run "true"
     Then nothing was run
+
+  Scenario: A stand-in that reads its input, and arguments matched
+    Given a stand-in "kubectl" that reads its input
+    And a file "web.yaml" holding:
+      """
+      kind: Deployment
+      name: web
+      """
+    When I run "sh -c 'kubectl apply -f - --server-side < web.yaml'"
+    Then it succeeds
+    And "kubectl" read the input:
+      """
+      kind: Deployment
+      name: web
+      """
+    And "kubectl" read input including "name: web"
+    And "kubectl" was run with arguments matching "apply -f - *"
+    And "kubectl" was run with "apply -f - --server-side"

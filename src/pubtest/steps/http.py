@@ -39,6 +39,11 @@ def not_signed_in(pubtest_ctx, identity_header):
     _headers(pubtest_ctx).pop(identity_header, None)
 
 
+@given(parsers.parse('requests carry the header "{name}" set to "{value}"'))
+def carry_header(pubtest_ctx, name, value):
+    _headers(pubtest_ctx)[name] = value
+
+
 @given(parsers.parse('requests come from "{origin}"'))
 def origin(pubtest_ctx, origin):
     _headers(pubtest_ctx)["Origin"] = origin
@@ -71,9 +76,24 @@ def post_form(pubtest_ctx, http_client, path, datatable):
     send(pubtest_ctx, http_client, "POST", path, urlencode(fields).encode(), "application/x-www-form-urlencoded")
 
 
-@when(parsers.parse('I send "{method}" to "{path}"'))
+@when(parsers.re(r'I send "(?P<method>[^"]+)" to "(?P<path>[^"]+)"'))
 def send_method(pubtest_ctx, http_client, method, path):
     send(pubtest_ctx, http_client, method, path)
+
+
+@when(parsers.parse('I send "{method}" to "{path}" with:'))
+def send_json(pubtest_ctx, http_client, method, path, docstring):
+    send(pubtest_ctx, http_client, method, path, docstring.encode(), "application/json")
+
+
+@when(parsers.parse('I send "{method}" to "{path}" with the file "{file}"'))
+def send_file(pubtest_ctx, http_client, method, path, file):
+    """The file's bytes, as they are, with the Content-Type a Given set, or
+    application/octet-stream."""
+    from .files import at  # noqa: PLC0415
+    body = at(pubtest_ctx, file).read_bytes()
+    typed = any(k.lower() == "content-type" for k in _headers(pubtest_ctx))
+    send(pubtest_ctx, http_client, method, path, body, None if typed else "application/octet-stream")
 
 
 def _answer(pubtest_ctx):

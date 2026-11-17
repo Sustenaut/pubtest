@@ -5,7 +5,7 @@ import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
-import { binVar, Context, dig, filesIn, includes, isEmpty, Result, same, show, split } from "./core.js";
+import { binVar, Context, deepEqual, dig, filesIn, includes, isEmpty, matches, repository, Result, same, show, split, yamlDocuments } from "./core.js";
 
 const BASIC = ["sh", "bash", "env", "cat", "echo", "printf", "mkdir", "rm", "cp", "mv", "chmod", "ls", "sed",
   "grep", "head", "tail", "tr", "cut", "sort", "uniq", "wc", "dirname", "basename", "mktemp", "date",
@@ -75,6 +75,9 @@ ${body}
   add(name, out = "", err = "", code = 0) {
     this.script(name, `process.stdout.write(${JSON.stringify(out)}); process.stderr.write(${JSON.stringify(err)}); process.exitCode = ${code};`);
   }
+  addReader(name) {
+    this.script(name, `fs.appendFileSync(${JSON.stringify(this.log)}, JSON.stringify({ name: ${JSON.stringify(name)}, input: fs.readFileSync(0, "utf8") }) + "\\n");`);
+  }
   addTurns(name, answers) {
     const store = path.join(this.bin, "..", `${name}.answers.json`);
     fs.writeFileSync(store, JSON.stringify(answers));
@@ -101,9 +104,15 @@ process.stdout.write(answer.stdout ?? ""); process.stderr.write(answer.stderr ??
     }
     return `${this.bin}${path.delimiter}${this.basic}`;
   }
-  runs(name) {
+  entries(name) {
     return fs.readFileSync(this.log, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l))
-      .filter((e) => name === undefined || e.name === name).map((e) => e.args);
+      .filter((e) => name === undefined || e.name === name);
+  }
+  runs(name) {
+    return this.entries(name).filter((e) => e.args).map((e) => e.args);
+  }
+  inputs(name) {
+    return this.entries(name).filter((e) => typeof e.input === "string").map((e) => e.input);
   }
 }
 
@@ -132,9 +141,10 @@ class Fake {
       req.on("end", () => {
         this.requests.push({ method: req.method, path: req.url, body, headers: req.headers });
         const queue = this.answers[`${req.method} ${req.url}`] ?? this.answers[`${req.method} ${req.url.split("?")[0]}`];
-        const [status, text] = queue ? (queue.length > 1 ? queue.shift() : queue[0]) : [404, ""];
+        const [status, text, extra] = queue ? (queue.length > 1 ? queue.shift() : queue[0]) : [404, "", {}];
         const headers = { "content-length": Buffer.byteLength(text) };
         if (/^\s*[{[]/.test(text)) headers["content-type"] = "application/json";
+        for (const [k, v] of Object.entries(extra ?? {})) headers[k.toLowerCase()] = v;
         res.writeHead(status, headers);
         res.end(text);
       });
@@ -146,8 +156,8 @@ class Fake {
   get url() {
     return `http://127.0.0.1:${this.server.address().port}`;
   }
-  answer(request, status, body = "") {
-    (this.answers[request] ??= []).push([status, body]);
+  answer(request, status, body = "", headers = {}) {
+    (this.answers[request] ??= []).push([status, body, headers]);
   }
   stop() {
     return new Promise((resolve) => this.server.close(() => resolve()));
@@ -168,6 +178,24 @@ async function fake(ctx, name) {
 function asked(ctx, name) {
   check(ctx.fakes[name], `there is no fake ${name} service`);
   return ctx.fakes[name].requests;
+}
+
+/** The requests `name` was asked that are `request`, "METHOD PATH", its
+ * query left out unless `request` names one. */
+function requests(ctx, name, request) {
+  return asked(ctx, name).filter((q) => [`${q.method} ${q.path}`, `${q.method} ${q.path.split("?")[0]}`].includes(request));
+}
+
+function printedJson(ctx) {
+  try {
+    return JSON.parse(ctx.outcome?.stdout ?? "");
+  } catch {
+    return fail(`it printed no JSON\n${showRun(ctx.outcome)}`);
+  }
+}
+
+function names(dir) {
+  return fs.readdirSync(dir, { withFileTypes: true }).map((e) => e.name + (e.isDirectory() ? "/" : "")).sort();
 }
 
 /** Everything the action produced, by where it went. */
@@ -194,8 +222,12 @@ export function produced(ctx) {
 }
 
 function git(ctx, ...args) {
+  return gitIn(ctx.directory ?? process.cwd(), ...args);
+}
+
+function gitIn(cwd, ...args) {
   const done = spawnSync("git", args, {
-    cwd: ctx.directory ?? process.cwd(), encoding: "utf8",
+    cwd, encoding: "utf8",
     env: { ...process.env, GIT_AUTHOR_NAME: "pubtest", GIT_AUTHOR_EMAIL: "pubtest@example.org",
       GIT_COMMITTER_NAME: "pubtest", GIT_COMMITTER_EMAIL: "pubtest@example.org" },
   });
@@ -266,6 +298,11 @@ export const STEPS = [
     check(said.includes(t), () => `it was refused, saying ${JSON.stringify(said)}`);
   }],
   ["Then", "it is refused", (ctx) => { ctx.refusalRead = true; check(ctx.refused, () => `it was not refused: the result is ${show(ctx.result)}`); }],
+  ["Then", "the result matches {string}", (ctx, p) => {
+    const got = returned(ctx);
+    check(typeof got === "string", () => `the result is ${show(got)}, not text`);
+    check(matches(p, got), () => `the result ${JSON.stringify(got)} does not match ${JSON.stringify(p)}`);
+  }],
   ["Then", "it is not refused", (ctx) => { ctx.refusalRead = true; check(!ctx.refused, () => `it was refused, saying ${ctx.refused.message}`); }],
 
   // Files
@@ -276,6 +313,13 @@ export const STEPS = [
   }],
   ["Given", "a file {string} holding {string}", (ctx, p, t) => write(ctx, p, `${t}\n`)],
   ["Given", "a file {string} holding:", (ctx, p, doc) => write(ctx, p, `${doc}\n`)],
+  ["Given", "a file {string} copied from {string}", (ctx, p, src) => {
+    const origin = path.join(ctx.repository, src);
+    check(fs.existsSync(origin), `the repository has no ${src}`);
+    const target = at(ctx, p);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.cpSync(origin, target, { recursive: true });
+  }],
   ["Given", "the file {string} is executable", (ctx, p) => fs.chmodSync(at(ctx, p), 0o755)],
   ["Given", "the file {string} is removed", (ctx, p) => fs.rmSync(at(ctx, p), { recursive: true, force: true })],
   ["When", "the file {string} changes to:", (ctx, p, doc) => write(ctx, p, `${doc}\n`)],
@@ -288,6 +332,21 @@ export const STEPS = [
   ["Then", "the file {string} does not include {string}", (ctx, p, t) => check(!text(ctx, p).includes(t), `${p} includes ${JSON.stringify(t)}`)],
   ["Then", "the JSON in {string} is:", (ctx, p, doc) => { const got = JSON.parse(text(ctx, p)); check(same(got, String(doc)), `${p} holds ${show(got)}`); }],
   ["Then", "the JSON in {string} has {string} equal to {string}", (ctx, p, k, v) => { const got = dig(JSON.parse(text(ctx, p)), k); check(same(got, v), `${p}'s ${k} is ${show(got)}, not ${v}`); }],
+  ["Then", "the file {string} can be run", (ctx, p) => {
+    check(fs.existsSync(at(ctx, p)), `there is no ${p}`);
+    let ok = true;
+    try { fs.accessSync(at(ctx, p), fs.constants.X_OK); } catch { ok = false; }
+    check(ok, `${p} is not executable`);
+  }],
+  ["Then", "the directory {string} holds:", (ctx, p, doc) => {
+    const dir = at(ctx, p);
+    check(fs.existsSync(dir) && fs.statSync(dir).isDirectory(), `there is no directory ${p}`);
+    const got = names(dir);
+    const want = String(doc).split("\n").map((l) => l.trim()).filter(Boolean);
+    check(JSON.stringify(got) === JSON.stringify(want), `${p} holds:\n${got.join("\n")}`);
+  }],
+  ["Then", "the YAML in {string} is:", async (ctx, p, doc) => { const got = await yamlDocuments(text(ctx, p)); check(deepEqual(got, await yamlDocuments(String(doc))), `${p} holds ${show(got)}`); }],
+  ["Then", "the YAML in {string} has {string} equal to {string}", async (ctx, p, k, v) => { const got = dig(await yamlDocuments(text(ctx, p)), k); check(same(got, v), `${p}'s ${k} is ${show(got)}, not ${v}`); }],
   ["Then", "nothing was written", (ctx) => {
     check(ctx.directory, "nothing was written needs a scratch directory");
     check(ctx.written !== null, "nothing was written needs a When: it compares with the directory before it");
@@ -319,6 +378,10 @@ export const STEPS = [
   ["Then", "stdout is empty", (ctx) => check(ctx.outcome?.stdout === "", () => showRun(ctx.outcome))],
   ["Then", "stderr mentions {string}", (ctx, t) => check(ctx.outcome?.stderr.includes(t), () => showRun(ctx.outcome))],
   ["Then", "stderr does not mention {string}", (ctx, t) => check(!ctx.outcome?.stderr.includes(t), () => showRun(ctx.outcome))],
+  ["Then", "it prints the JSON:", (ctx, doc) => { const got = printedJson(ctx); check(same(got, String(doc)), () => `it printed ${show(got)}, not:\n${doc}`); }],
+  ["Then", "the JSON it prints has {string} equal to {string}", (ctx, k, v) => { const got = dig(printedJson(ctx), k); check(same(got, v), () => `the ${k} it printed is ${show(got)}, not ${v}`); }],
+  ["Then", "it prints a line matching {string}", (ctx, p) => check((ctx.outcome?.stdout ?? "").split("\n").some((l) => matches(p, l)), () => `no line matches ${JSON.stringify(p)}\n${showRun(ctx.outcome)}`)],
+  ["Then", "stderr has a line matching {string}", (ctx, p) => check((ctx.outcome?.stderr ?? "").split("\n").some((l) => matches(p, l)), () => `no line of stderr matches ${JSON.stringify(p)}\n${showRun(ctx.outcome)}`)],
 
   // Stand-in programs
   ["Given", "a stand-in {string}", (ctx, n) => { standins(ctx).add(n); refreshPath(ctx); }],
@@ -335,16 +398,21 @@ export const STEPS = [
     standins(ctx).addTurns(n, answers);
     refreshPath(ctx);
   }],
+  ["Given", "a stand-in {string} that reads its input", (ctx, n) => { standins(ctx).addReader(n); refreshPath(ctx); }],
   ["Given", "only stand-ins are installed", (ctx) => { standins(ctx).only = true; refreshPath(ctx); }],
   ["Given", "{string} is not installed", (ctx, n) => { const s = standins(ctx); s.remove(n); s.only = true; refreshPath(ctx); }],
   ["Then", "{string} was run with {string}", (ctx, n, args) => { const runs = ctx.standins?.runs(n) ?? []; check(runs.some((r) => JSON.stringify(r) === JSON.stringify(split(args))), `${n} ran with ${show(runs)}`); }],
   ["Then", "{string} was run {int} times", (ctx, n, k) => { const runs = ctx.standins?.runs(n) ?? []; check(runs.length === k, `${n} ran ${runs.length} times`); }],
   ["Then", "{string} was not run", (ctx, n) => { const runs = ctx.standins?.runs(n) ?? []; check(runs.length === 0, `${n} ran with ${show(runs)}`); }],
+  ["Then", "{string} was run with arguments matching {string}", (ctx, n, p) => { const runs = ctx.standins?.runs(n) ?? []; check(runs.some((r) => matches(p, r.join(" "))), `${n} ran with ${show(runs)}`); }],
+  ["Then", "{string} read the input:", (ctx, n, doc) => { const got = ctx.standins?.inputs(n) ?? []; check(got.map((i) => i.replace(/\n$/, "")).includes(String(doc).replace(/\n$/, "")), `${n} read ${show(got)}`); }],
+  ["Then", "{string} read input including {string}", (ctx, n, t) => { const got = ctx.standins?.inputs(n) ?? []; check(got.some((i) => i.includes(t)), `${n} read ${show(got)}`); }],
   ["Then", "nothing was run", (ctx) => { const runs = ctx.standins?.runs() ?? []; check(runs.length === 0, `ran: ${show(runs)}`); }],
 
   // HTTP: the service under test
   ["Given", "I am signed in as {string}", (ctx, email) => { ctx.headers[ctx.identityHeader] = email; }],
   ["Given", "I am not signed in", (ctx) => { delete ctx.headers[ctx.identityHeader]; }],
+  ["Given", "requests carry the header {string} set to {string}", (ctx, h, v) => { ctx.headers[h.toLowerCase()] = v; }],
   ["Given", "requests come from {string}", (ctx, origin) => { ctx.headers.origin = origin; }],
   ["When", "I GET {string}", (ctx, p) => send(ctx, "GET", p)],
   ["When", "I POST to {string} with:", (ctx, p, doc) => send(ctx, "POST", p, String(doc), "application/json")],
@@ -354,6 +422,11 @@ export const STEPS = [
     return send(ctx, "POST", p, new URLSearchParams(data.map(([k, v]) => [k, v])).toString(), "application/x-www-form-urlencoded");
   }],
   ["When", "I send {string} to {string}", (ctx, m, p) => send(ctx, m, p)],
+  ["When", "I send {string} to {string} with:", (ctx, m, p, doc) => send(ctx, m, p, String(doc), "application/json")],
+  ["When", "I send {string} to {string} with the file {string}", (ctx, m, p, f) => {
+    const typed = Object.keys(ctx.headers).some((k) => k.toLowerCase() === "content-type");
+    return send(ctx, m, p, fs.readFileSync(at(ctx, f)), typed ? undefined : "application/octet-stream");
+  }],
   ["Then", "the answer is {int}", (ctx, s) => { const a = answer(ctx); check(a.status === s, () => showAnswer(a)); }],
   ["Then", "the answer's {string} is {string}", (ctx, h, v) => { const a = answer(ctx); check(a.header(h) === v, () => showAnswer(a)); }],
   ["Then", "the answer has no {string}", (ctx, h) => { const a = answer(ctx); check(a.header(h) === undefined, () => showAnswer(a)); }],
@@ -367,6 +440,7 @@ export const STEPS = [
   ["Given", "a fake {string} service", (ctx, n) => fake(ctx, n)],
   ["Given", "the {string} service answers {string} with {int}", async (ctx, n, r, s) => (await fake(ctx, n)).answer(r, s)],
   ["Given", "the {string} service answers {string} with {int} and:", async (ctx, n, r, s, doc) => (await fake(ctx, n)).answer(r, s, String(doc))],
+  ["Given", "the {string} service answers {string} with {int} and the header {string} set to {string}", async (ctx, n, r, s, h, v) => (await fake(ctx, n)).answer(r, s, "", { [h]: v })],
   ["Given", "the answers recorded in {string}", async (ctx, dir) => {
     let base = path.join(ctx.directory ?? process.cwd(), dir);
     if (!fs.existsSync(base)) base = dir;
@@ -378,6 +452,11 @@ export const STEPS = [
     }
   }],
   ["Then", "the {string} service was asked {string}", (ctx, n, r) => { const a = asked(ctx, n).map((q) => `${q.method} ${q.path}`); check(a.includes(r) || a.map((x) => x.split("?")[0]).includes(r), `${n} was asked ${show(a)}`); }],
+  ["Then", "the {string} service was asked {string} {int} times", (ctx, n, r, k) => { const got = requests(ctx, n, r).length; check(got === k, `${n} was asked ${r} ${got} times`); }],
+  ["Then", "the {string} service was asked {string} with the header {string} set to {string}", (ctx, n, r, h, v) => {
+    const seen = requests(ctx, n, r).map((q) => q.headers[h.toLowerCase()]);
+    check(seen.includes(v), `${n} was asked ${r} with ${h} ${show(seen)}`);
+  }],
   ["Then", "the {string} service was sent:", (ctx, n, doc) => {
     const bodies = asked(ctx, n).map((q) => { try { return JSON.parse(q.body); } catch { return q.body; } });
     check(bodies.some((b) => same(b, String(doc))), `${n} was sent ${show(bodies)}`);
@@ -402,6 +481,19 @@ export const STEPS = [
   ["Given", "a git repository", (ctx) => { git(ctx, "init", "-q", "-b", "main"); git(ctx, "commit", "-q", "--allow-empty", "-m", "start"); }],
   ["Given", "a commit tagged {string}", (ctx, tag) => { git(ctx, "add", "-A"); git(ctx, "commit", "-q", "--allow-empty", "-m", tag); git(ctx, "tag", tag); }],
   ["Given", "the branch {string}", (ctx, b) => { git(ctx, "switch", "-q", "-c", b); }],
+  ["Given", "everything is committed with the message {string}", (ctx, m) => { git(ctx, "add", "-A"); git(ctx, "commit", "-q", "--allow-empty", "-m", m); }],
+  ["Given", "a bare remote {string}", (ctx, n) => {
+    const parent = fs.mkdtempSync(path.join(os.tmpdir(), "pubtest-remotes-"));
+    ctx.cleanup(() => fs.rmSync(parent, { recursive: true, force: true }));
+    const remote = path.join(parent, `${n}.git`);
+    gitIn(parent, "init", "-q", "--bare", "-b", "main", remote);
+    git(ctx, "remote", "add", n, remote);
+    git(ctx, "push", "-q", n, "HEAD");
+  }],
+  ["Then", "the last commit's message includes {string}", (ctx, t) => { const m = git(ctx, "log", "-1", "--format=%B"); check(m.includes(t), `the last commit's message is ${JSON.stringify(m)}`); }],
+  ["Then", "the working tree is clean", (ctx) => { const st = git(ctx, "status", "--porcelain"); check(st === "", `the working tree has changes:\n${st}`); }],
+  ["Then", "the tag {string} exists", (ctx, t) => { const tags = git(ctx, "tag", "--list").split("\n"); check(tags.includes(t), `the tags are ${show(tags)}`); }],
+  ["Then", "the remote {string} has the branch {string}", (ctx, n, b) => check(git(ctx, "ls-remote", "--heads", n, b) !== "", `the remote ${n} has no branch ${b}`)],
 ];
 
 function write(ctx, p, t) {
@@ -428,6 +520,7 @@ const WRAPPERS = [
   (s) => function (a, b) { return s(this.pubtest, a, b); },
   (s) => function (a, b, c) { return s(this.pubtest, a, b, c); },
   (s) => function (a, b, c, d) { return s(this.pubtest, a, b, c, d); },
+  (s) => function (a, b, c, d, e) { return s(this.pubtest, a, b, c, d, e); },
 ];
 
 /**
@@ -443,9 +536,11 @@ const WRAPPERS = [
  */
 export function register(api, { runner = "cucumber", client, identityHeader = "x-forwarded-email" } = {}) {
   const quick = runner === "quickpickle";
+  const root = repository();
   const begin = (world) => {
     world.pubtest = new Context();
     world.pubtest.identityHeader = identityHeader.toLowerCase();
+    world.pubtest.repository = root;
     if (client) world.pubtest.client = client(world);
     world.attempt = (action) => world.pubtest.attempt(action);
   };

@@ -90,7 +90,7 @@ def app(environ, start_response):
 
     if path == "/hello":
         return answer("200 OK", f"hello, {who}") if who else answer("403 Forbidden", "sign in")
-    if path == "/echo" and method == "POST":
+    if path == "/echo" and method in ("POST", "PUT"):
         return answer("200 OK", json.dumps({"echo": json.loads(body)}), "application/json")
     if path == "/form" and method == "POST":
         fields = parse_qs(body.decode())
@@ -98,8 +98,13 @@ def app(environ, start_response):
     if path == "/old":
         return answer("302 Found", "", extra=[("Location", "/new")])
     if path == "/forecast":
-        with urllib.request.urlopen(os.environ["WEATHER_URL"] + "/today") as r:
-            return answer("200 OK", r.read().decode())
+        asked = urllib.request.Request(os.environ["WEATHER_URL"] + "/today", headers={"X-Client": "pubtest-app"})
+        with urllib.request.urlopen(asked) as r:
+            sky = [("X-Sky", r.headers["X-Sky"])] if r.headers.get("X-Sky") else []
+            return answer("200 OK", r.read().decode(), extra=sky)
+    if path == "/upload":
+        kind = environ.get("CONTENT_TYPE", "-")
+        return answer("200 OK", f"{method} {kind} {len(body)} {environ.get('HTTP_X_TOKEN', '-')}")
     return answer("404 Not Found", "")
 
 

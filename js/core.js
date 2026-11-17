@@ -223,6 +223,39 @@ export function split(command) {
   return words;
 }
 
+/** Whether all of `text` is `pattern`, in which only `*` is special: it
+ * stands for anything, newlines too. The same in Python and in Node. */
+export function matches(pattern, text) {
+  const escaped = pattern.split("*").map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  return new RegExp(`^${escaped.join(".*")}$`, "s").test(text);
+}
+
+/** The repository the suite runs in: the nearest directory, from `start`
+ * (the working directory) up, that holds pubrules.json, or else `start`. */
+export function repository(start = process.cwd()) {
+  let dir = path.resolve(start);
+  for (;;) {
+    if (fs.existsSync(path.join(dir, "pubrules.json"))) return dir;
+    const up = path.dirname(dir);
+    if (up === dir) return path.resolve(start);
+    dir = up;
+  }
+}
+
+/** A YAML text's document, or the list of its documents when it holds more
+ * than one. The yaml package is the suite's to install: pubtest needs it
+ * only for the YAML steps. */
+export async function yamlDocuments(text) {
+  let yaml;
+  try {
+    yaml = await import("yaml");
+  } catch {
+    throw new Error("the YAML steps need the yaml package: npm install --save-dev yaml");
+  }
+  const docs = yaml.parseAllDocuments(text).map((d) => d.toJS()).filter((d) => d !== null && d !== undefined);
+  return docs.length === 1 ? docs[0] : docs;
+}
+
 export function binVar(name) {
   return name.replace(/[^A-Za-z0-9]/g, "_").toUpperCase() + "_BIN_DIR";
 }
