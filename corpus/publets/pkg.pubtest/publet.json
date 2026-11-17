@@ -1,0 +1,99 @@
+{
+  "claims": {
+    "identity": {
+      "class": "archival",
+      "content": "pubtest 0.1.0 is released as v0.1.0 from commit 191fdca0c24b92f866ea49d5e5ca9c4bf83723fe.",
+      "data": {
+        "columns": [
+          {
+            "name": "name"
+          },
+          {
+            "name": "version"
+          },
+          {
+            "name": "check"
+          },
+          {
+            "name": "expect"
+          },
+          {
+            "name": "tag"
+          },
+          {
+            "name": "commit"
+          }
+        ],
+        "rows": [
+          [
+            "pubtest",
+            "0.1.0",
+            "",
+            "",
+            "v0.1.0",
+            "191fdca0c24b92f866ea49d5e5ca9c4bf83723fe"
+          ]
+        ]
+      },
+      "scope": "the published release v0.1.0 of pubtest",
+      "sources": [
+        {
+          "ref": "pubtest",
+          "revision": "191fdca0c24b92f866ea49d5e5ca9c4bf83723fe"
+        }
+      ]
+    },
+    "release": {
+      "class": "archival",
+      "content": "pubtest 0.1.0 was released on 2026-11-17 from commit 191fdca0c24b92f866ea49d5e5ca9c4bf83723fe with these changes.",
+      "data": {
+        "columns": [
+          {
+            "name": "category"
+          },
+          {
+            "name": "change"
+          }
+        ],
+        "rows": [
+          [
+            "added",
+            "pubtest 0.1.0: the grammar (GRAMMAR.md), a pytest-bdd plugin with pubkit's plugin moved in, and an npm package for cucumber-js and quickpickle, one feature suite run in all three"
+          ]
+        ]
+      },
+      "depends": [
+        "#identity"
+      ],
+      "scope": "the published release v0.1.0 of pubtest",
+      "sources": [
+        {
+          "ref": "pubtest",
+          "revision": "191fdca0c24b92f866ea49d5e5ca9c4bf83723fe"
+        }
+      ]
+    }
+  },
+  "created": "2026-11-17T00:00:00Z",
+  "sections": [
+    {
+      "heading": "Identity",
+      "items": [
+        {
+          "ref": "#identity"
+        }
+      ]
+    },
+    {
+      "heading": "Release",
+      "items": [
+        {
+          "ref": "#release"
+        }
+      ]
+    }
+  ],
+  "slug": "pkg.pubtest",
+  "tag": "PKG-PUBTST-11-2026",
+  "title": "pubtest"
+}
