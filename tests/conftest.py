@@ -58,7 +58,7 @@ def divide(ctx, a, b):
 
 
 def main(argv):
-    """A command-line main, called in-process, as pubkit-style suites call theirs."""
+    """A command-line main, called in-process, as pubrules-style suites call theirs."""
     import sys  # noqa: PLC0415
     if argv and argv[0].startswith("--"):
         print("usage: main [NAME]", file=sys.stderr)
@@ -133,7 +133,7 @@ def inner_run(pytester, what):
     then_line = "Then nothing else is checked" if what == "no refusal" else "Then it is refused"
     pytester.makefile(".feature", inner=INNER_FEATURE.format(then=then_line))
     pytester.makepyfile(test_inner=INNER_STEPS)
-    pytester.makeini("[pytest]\nbdd_features_base_dir = .\naddopts = -p no:pubkit\n")
+    pytester.makeini("[pytest]\nbdd_features_base_dir = .\naddopts = -p no:pubrules\n")
     return pytester.runpytest()
 
 
@@ -145,3 +145,34 @@ def inner_fails(inner, text):
 @then("that scenario passes")
 def inner_passes(inner):
     assert inner.ret == 0, inner.stdout.str()
+
+
+PROPERTY_SUITE = '''from pathlib import Path
+from hypothesis import given, strategies as st
+
+@given(st.integers())
+def test_property(x):
+    with Path("examples").open("a") as f:
+        f.write("x\\n")
+'''
+
+
+@when(parsers.parse('a suite with one property runs with PUBRULES_FUZZ_RUNS at "{runs}"'),
+      target_fixture="inner")
+def property_suite(pytester, monkeypatch, runs):
+    monkeypatch.setenv("PUBRULES_FUZZ_RUNS", runs)
+    pytester.makepyfile(test_property=PROPERTY_SUITE)
+    pytester.makeini("[pytest]\naddopts = -p no:pubrules\n")
+    return pytester.runpytest()
+
+
+@then(parsers.parse("that property ran {count:d} examples"))
+def property_ran(inner, pytester, count):
+    assert inner.ret == 0, inner.stdout.str()
+    assert len((pytester.path / "examples").read_text().splitlines()) == count
+
+
+@then(parsers.parse('that suite is refused, saying "{text}"'))
+def suite_refused(inner, text):
+    said = inner.stdout.str() + inner.stderr.str()
+    assert inner.ret == pytest.ExitCode.USAGE_ERROR and text in said, said

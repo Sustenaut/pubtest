@@ -9,7 +9,7 @@ It gives a suite pubtest's steps (GRAMMAR.md), and:
 - `run(...)`: run a program and capture what it did as a `Completed`;
 - markers for every `@tag` the feature files carry, so `--strict-markers`
   catches a typo without each tag registered by hand;
-- Hypothesis's examples per property from `PUBKIT_FUZZ_RUNS`, which CI sets.
+- Hypothesis's examples per property from `PUBRULES_FUZZ_RUNS`, which CI sets.
 
 A suite's own step with the same text takes precedence over these.
 """
@@ -128,27 +128,22 @@ def _features(config: pytest.Config) -> Path:
 
 
 def _hypothesis_runs() -> None:
-    """Load a Hypothesis profile running PUBKIT_FUZZ_RUNS examples per
+    """Load a Hypothesis profile running PUBRULES_FUZZ_RUNS examples per
     property, with no deadline: on a shared CI runner timing is noise."""
-    raw = os.environ.get("PUBKIT_FUZZ_RUNS", "")
+    raw = os.environ.get("PUBRULES_FUZZ_RUNS", "")
     if not raw:
         return
     if not raw.isdigit() or int(raw) < 1:
-        raise pytest.UsageError(f"PUBKIT_FUZZ_RUNS must be a positive whole number, not {raw!r}")
+        raise pytest.UsageError(f"PUBRULES_FUZZ_RUNS must be a positive whole number, not {raw!r}")
     try:
         from hypothesis import settings  # noqa: PLC0415
     except ImportError:
         return
-    settings.register_profile("pubkit", max_examples=int(raw), deadline=None, print_blob=True)
-    settings.load_profile("pubkit")
+    settings.register_profile("pubrules", max_examples=int(raw), deadline=None, print_blob=True)
+    settings.load_profile("pubrules")
 
 
 def pytest_configure(config: pytest.Config) -> None:
-    if config.pluginmanager.has_plugin("pubkit"):
-        # Until pubkit drops the plugin it carried, the two define the same
-        # fixtures and steps, and which wins is pytest's choice, not the suite's.
-        raise pytest.UsageError("pubkit's pytest plugin is loaded beside pubtest's: add -p no:pubkit to the "
-                                "suite's addopts until it moves to a pubkit without one")
     _hypothesis_runs()
     root = _features(config)
     tags: set[str] = set()
