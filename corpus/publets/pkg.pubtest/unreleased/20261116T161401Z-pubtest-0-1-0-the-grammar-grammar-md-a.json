@@ -1,4 +1,0 @@
-{
-  "category": "added",
-  "change": "pubtest 0.1.0: the grammar (GRAMMAR.md), a pytest-bdd plugin with pubkit's plugin moved in, and an npm package for cucumber-js and quickpickle, one feature suite run in all three"
-}
