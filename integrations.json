@@ -20,6 +20,7 @@
     {
       "plugin": "github.repo-ops",
       "paths": [
+        ".github/workflows/wheel.yml",
         "scripts/go-live.sh"
       ],
       "mode": "required"

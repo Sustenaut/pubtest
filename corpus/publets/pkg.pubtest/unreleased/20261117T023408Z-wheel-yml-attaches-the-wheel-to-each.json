@@ -1,0 +1,4 @@
+{
+  "category": "internal",
+  "change": "wheel.yml attaches the wheel to each release, as pubhost's does"
+}
