@@ -2,7 +2,7 @@
   "claims": {
     "identity": {
       "class": "archival",
-      "content": "pubtest 0.1.0 is released as v0.1.0 from commit 191fdca0c24b92f866ea49d5e5ca9c4bf83723fe.",
+      "content": "pubtest 0.2.0 is released as v0.2.0 from commit 502f35cf106a6579342fc5c4b6154685af8628cc.",
       "data": {
         "columns": [
           {
@@ -27,25 +27,25 @@
         "rows": [
           [
             "pubtest",
-            "0.1.0",
+            "0.2.0",
             "",
             "",
-            "v0.1.0",
-            "191fdca0c24b92f866ea49d5e5ca9c4bf83723fe"
+            "v0.2.0",
+            "502f35cf106a6579342fc5c4b6154685af8628cc"
           ]
         ]
       },
-      "scope": "the published release v0.1.0 of pubtest",
+      "scope": "the published release v0.2.0 of pubtest",
       "sources": [
         {
           "ref": "pubtest",
-          "revision": "191fdca0c24b92f866ea49d5e5ca9c4bf83723fe"
+          "revision": "502f35cf106a6579342fc5c4b6154685af8628cc"
         }
       ]
     },
     "release": {
       "class": "archival",
-      "content": "pubtest 0.1.0 was released on 2026-11-17 from commit 191fdca0c24b92f866ea49d5e5ca9c4bf83723fe with these changes.",
+      "content": "pubtest 0.2.0 was released on 2026-11-17 from commit 502f35cf106a6579342fc5c4b6154685af8628cc with these changes.",
       "data": {
         "columns": [
           {
@@ -57,19 +57,27 @@
         ],
         "rows": [
           [
-            "added",
-            "pubtest 0.1.0: the grammar (GRAMMAR.md), a pytest-bdd plugin with pubkit's plugin moved in, and an npm package for cucumber-js and quickpickle, one feature suite run in all three"
+            "internal",
+            "wheel.yml attaches the wheel to each release, as pubhost's does"
+          ],
+          [
+            "fixed",
+            "A suite with a ctx fixture of its own (a dict, as suites had under pubkit's plugin) keeps every pubtest step: the steps use pubtest_ctx, which is the suite's ctx only when it is pubtest's"
+          ],
+          [
+            "changed",
+            "Hypothesis's examples per property come from PUBRULES_FUZZ_RUNS, which pubrules' CI sets, in place of PUBKIT_FUZZ_RUNS, and run under a profile named pubrules; pubtest no longer refuses to load beside pubkit's old pytest plugin, which pubkit 0.42.0 dropped"
           ]
         ]
       },
       "depends": [
         "#identity"
       ],
-      "scope": "the published release v0.1.0 of pubtest",
+      "scope": "the published release v0.2.0 of pubtest",
       "sources": [
         {
           "ref": "pubtest",
-          "revision": "191fdca0c24b92f866ea49d5e5ca9c4bf83723fe"
+          "revision": "502f35cf106a6579342fc5c4b6154685af8628cc"
         }
       ]
     }
