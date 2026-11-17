@@ -50,7 +50,9 @@ def pubtest_repository(request) -> Path:
 
 @given(parsers.parse('a file "{path}" copied from "{source}"'))
 def copied(pubtest_ctx, pubtest_repository, path, source):
-    origin = pubtest_repository / source
+    origin = (pubtest_repository / source).resolve()
+    if Path(source).is_absolute() or not origin.is_relative_to(pubtest_repository.resolve()):
+        raise AssertionError(f"{source} is not in the repository: copy only the repository's own files")
     assert origin.exists(), f"the repository has no {source}"
     target = at(pubtest_ctx, path)
     target.parent.mkdir(parents=True, exist_ok=True)

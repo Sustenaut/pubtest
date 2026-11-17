@@ -120,7 +120,7 @@ regular expression would not.
 | `Given a file "P" holding:` + docstring | writes the text |
 | `Given the file "P" is executable` | sets its mode so it runs |
 | `Given the file "P" is removed` | deletes it, or a directory and what it holds |
-| `Given a file "P" copied from "SRC"` | copies a file or a directory of the repository (the nearest directory holding pubrules.json, from where the suite started) to P: a fixture kept beside the suite |
+| `Given a file "P" copied from "SRC"` | copies a file or a directory of the repository (the nearest directory holding pubrules.json, from where the suite started) to P: a fixture kept beside the suite. A SRC that is absolute, or that leads out of the repository, is refused |
 | `When the file "P" changes to:` + docstring | rewrites it, as a person would between two runs |
 | `Then the file "P" exists` / `does not exist` | |
 | `Then the file "P" holds "T"` | its whole text, less a final newline, is T |

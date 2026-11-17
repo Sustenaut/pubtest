@@ -75,6 +75,17 @@ Feature: Files in a scratch directory
     When I run "cat fixtures/git.feature"
     Then it prints "A git repository in the scratch directory"
 
+  Scenario Outline: A copy from outside the repository is refused
+    When I copy "<source>" from the repository
+    Then it is refused, saying "is not in the repository"
+    And the file "copy" does not exist
+
+    Examples:
+      | source              |
+      | ../outside.txt      |
+      | features/../../x    |
+      | /etc/hostname       |
+
   Scenario: A file the program made runnable, and what a directory holds
     Given a file "tool.sh" holding "#!/bin/sh"
     When I run "sh -c 'chmod +x tool.sh && mkdir -p out/sub && touch out/b.txt out/a.txt'"

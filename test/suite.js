@@ -5,6 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { produced } from "../js/index.js";
+import { STEPS } from "../js/steps.js";
 
 process.env.GREET_BIN_DIR ??= path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "tests", "bin");
 
@@ -62,6 +63,10 @@ export function suite(define) {
     console.log("ok");
   }
 
+  define("When", "I copy {string} from the repository", function (src) {
+    const [, , copy] = STEPS.find(([, expression]) => expression === "a file {string} copied from {string}");
+    return this.attempt(() => copy(this.pubtest, "copy", src));
+  });
   define("When", "I run main with {string}", function (args) { return this.attempt(() => main(args.split(" "))); });
 
   define("Then", "the secret is found in {string}", function (where) {

@@ -67,6 +67,12 @@ def main(argv):
     print("ok")
 
 
+@when(parsers.parse('I copy "{source}" from the repository'))
+def copy_from_repository(ctx, pubtest_repository, source):
+    from pubtest.steps.files import copied  # noqa: PLC0415
+    ctx.attempt(lambda: copied(ctx, pubtest_repository, "copy", source))
+
+
 @when(parsers.parse('I run main with "{args}"'))
 def run_main(ctx, args):
     ctx.attempt(lambda: main(args.split()))

@@ -24,7 +24,7 @@ jobs:
     needs: [tested]
     if: ${{ needs.tested.outputs.tested != 'true' }}
     uses: Sustenaut/pubrules/.github/workflows/job-python-functional.yml@2fe559caa00c029d9be864faa7f7cc20cd234d0e # v0.43.0
-    with: {"setup": "make venv && npm ci --ignore-scripts", "test": "make functional && npm audit --package-lock-only && npm test && shellcheck scripts/*.sh"}
+    with: {"setup": "make venv && npm ci --ignore-scripts", "test": "make functional && npm audit --package-lock-only && npm test && shellcheck scripts/*.sh", "coverage-report": "coverage/"}
 
   audit:
     name: ci
@@ -46,7 +46,7 @@ jobs:
     permissions:
       actions: read
       contents: read
-    with: {"reports": "sonar.python.coverage.reportPaths=*.xml", "layout": "-Dsonar.sources=src -Dsonar.tests=tests", "coverage-run": "${{ needs.tested.outputs.run-id }}"}
+    with: {"sonar-args": "-Dsonar.javascript.lcov.reportPaths=coverage-download/lcov.info -Dsonar.coverage.exclusions=test/**,tests/**", "reports": "sonar.python.coverage.reportPaths=*.xml", "layout": "-Dsonar.sources=src -Dsonar.tests=tests", "coverage-run": "${{ needs.tested.outputs.run-id }}"}
     secrets: { SONAR_TOKEN: '${{ secrets.SONAR_TOKEN }}' }
 
   # The one check a ruleset requires: it passes only when every job

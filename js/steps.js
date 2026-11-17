@@ -116,9 +116,21 @@ process.stdout.write(answer.stdout ?? ""); process.stderr.write(answer.stderr ??
   }
 }
 
+/** The scenario's own directory for what pubtest keeps outside the scratch
+ * directory (stand-ins, bare remotes), removed when the scenario ends, as
+ * pytest's tmp_path is. */
+function scenarioTemp(ctx) {
+  if (!ctx.temp) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pubtest-"));
+    ctx.temp = dir;
+    ctx.cleanup(() => fs.rmSync(dir, { recursive: true, force: true }));
+  }
+  return ctx.temp;
+}
+
 function standins(ctx) {
   if (!ctx.standins) {
-    ctx.standins = new Standins(fs.mkdtempSync(path.join(os.tmpdir(), "pubtest-")));
+    ctx.standins = new Standins(path.join(scenarioTemp(ctx), "pubtest"));
     setEnv(ctx, "PATH", ctx.standins.path());
   }
   return ctx.standins;
@@ -314,7 +326,10 @@ export const STEPS = [
   ["Given", "a file {string} holding {string}", (ctx, p, t) => write(ctx, p, `${t}\n`)],
   ["Given", "a file {string} holding:", (ctx, p, doc) => write(ctx, p, `${doc}\n`)],
   ["Given", "a file {string} copied from {string}", (ctx, p, src) => {
-    const origin = path.join(ctx.repository, src);
+    const origin = path.resolve(ctx.repository, src);
+    const inside = path.relative(path.resolve(ctx.repository), origin);
+    check(!path.isAbsolute(src) && inside !== ".." && !inside.startsWith(`..${path.sep}`) && !path.isAbsolute(inside),
+      `${src} is not in the repository: copy only the repository's own files`);
     check(fs.existsSync(origin), `the repository has no ${src}`);
     const target = at(ctx, p);
     fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -483,8 +498,8 @@ export const STEPS = [
   ["Given", "the branch {string}", (ctx, b) => { git(ctx, "switch", "-q", "-c", b); }],
   ["Given", "everything is committed with the message {string}", (ctx, m) => { git(ctx, "add", "-A"); git(ctx, "commit", "-q", "--allow-empty", "-m", m); }],
   ["Given", "a bare remote {string}", (ctx, n) => {
-    const parent = fs.mkdtempSync(path.join(os.tmpdir(), "pubtest-remotes-"));
-    ctx.cleanup(() => fs.rmSync(parent, { recursive: true, force: true }));
+    const parent = path.join(scenarioTemp(ctx), "pubtest-remotes");
+    fs.mkdirSync(parent, { recursive: true });
     const remote = path.join(parent, `${n}.git`);
     gitIn(parent, "init", "-q", "--bare", "-b", "main", remote);
     git(ctx, "remote", "add", n, remote);
