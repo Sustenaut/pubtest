@@ -58,7 +58,7 @@ def divide(ctx, a, b):
 
 
 def main(argv):
-    """A command-line main, called in-process, as pubkit-style suites call theirs."""
+    """A command-line main, called in-process, as pubrules-style suites call theirs."""
     import sys  # noqa: PLC0415
     if argv and argv[0].startswith("--"):
         print("usage: main [NAME]", file=sys.stderr)
@@ -133,7 +133,7 @@ def inner_run(pytester, what):
     then_line = "Then nothing else is checked" if what == "no refusal" else "Then it is refused"
     pytester.makefile(".feature", inner=INNER_FEATURE.format(then=then_line))
     pytester.makepyfile(test_inner=INNER_STEPS)
-    pytester.makeini("[pytest]\nbdd_features_base_dir = .\naddopts = -p no:pubkit\n")
+    pytester.makeini("[pytest]\nbdd_features_base_dir = .\naddopts = -p no:pubrules\n")
     return pytester.runpytest()
 
 
@@ -162,7 +162,7 @@ def test_property(x):
 def property_suite(pytester, monkeypatch, runs):
     monkeypatch.setenv("PUBRULES_FUZZ_RUNS", runs)
     pytester.makepyfile(test_property=PROPERTY_SUITE)
-    pytester.makeini("[pytest]\naddopts = -p no:pubkit\n")
+    pytester.makeini("[pytest]\naddopts = -p no:pubrules\n")
     return pytester.runpytest()
 
 
