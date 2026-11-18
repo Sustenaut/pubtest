@@ -68,9 +68,14 @@ When("the planner plans {string}", async function (week) {
 `attempt` awaits what the action returns when it is awaitable, in Python as
 in Node.
 
+A scenario with a second When is checked against the second: each Then reads
+what the latest action came to. In Python a suite's own When may instead set
+`target_fixture="result"` to a run of its own (a `subprocess.CompletedProcess`,
+say), which the program steps then read until pubtest's next `I run`.
+
 **A refusal no step reads fails the scenario.** When the action was refused
-and no Then read the refusal (`it is refused…`, `it fails`, `the exit code
-is N`), the scenario fails when it ends, with the refusal's traceback. A
+and no Then read the refusal (`it is refused…`, `the refusal …`, `it fails`,
+`the exit code is N`), the scenario fails when it ends, with the refusal's traceback. A
 broken When cannot pass through `the result is empty`.
 
 ## The steps
@@ -84,6 +89,12 @@ never 1, nor 0 false. The same rule
 holds for `includes` and `the result's "K" is "V"`. A dotted key indexes maps
 by name and lists by number (`people.0.name`). A docstring (`"""`) or a table
 carries anything longer. Paths are relative to the scratch directory.
+
+A quoted value may be empty: `the environment sets "N" to ""` sets N to the
+empty text, and `the result's "K" is ""` holds for an empty text. A quote
+inside a value is written `\"`. A suite writing a step of its own with a
+quoted value in Python can use `pubtest.steps.phrase('… "{name}" …')` in
+place of `parsers.parse`, which matches the same way, `""` too.
 
 The YAML steps read YAML with PyYAML in Python and the `yaml` package in
 Node, which a suite that uses them installs; pubtest itself needs neither.
@@ -99,11 +110,15 @@ Node, which a suite that uses them installs; pubtest itself needs neither.
 | `Then the result includes "V"` | text contains it, a list holds it, a map has it as a key |
 | `Then the result does not include "V"` | the opposite |
 | `Then the result's "K" is "V"` | the value at the dotted key K (`a.b.0`) equals V |
+| `Then the result's "K" includes "T"` | the value at K includes T, as `the result includes` reads it |
+| `Then the result's "K" matches "P"` | the value at K is text, and all of it is the pattern P |
 | `Then the result has N items` | the result's length is N (any noun: `N links`, `N emails`) |
 | `Then the result is empty` | nothing: `None`, `null`, `undefined`, `""`, `[]`, `{}` |
 | `Then it is refused, saying "T"` | the action raised, and its message contains T |
 | `Then it is refused` | the action raised |
 | `Then it is not refused` | the action returned |
+| `Then the refusal is a "NAME"` | the action raised, and the refusal's class, or a class it derives from, is NAME: in Python a class in its MRO, by its name or its module's and its name (`builtins.KeyError`); in Node a constructor on its prototype chain |
+| `Then the refusal's "K" is "V"` | the value at the dotted key K of the refusal's attributes equals V; `message` is its message |
 | `Then the result matches "P"` | the result is text, and all of it is the pattern P (below) |
 
 A **pattern** is literal text in which only `*` is special: it stands for
@@ -119,7 +134,7 @@ regular expression would not.
 | `Given a file "P" holding "T"` | writes one line of text (a Given's words differ from the Then's: cucumber-js matches a step by its text alone) |
 | `Given a file "P" holding:` + docstring | writes the text |
 | `Given the file "P" is executable` | sets its mode so it runs |
-| `Given the file "P" is removed` | deletes it, or a directory and what it holds |
+| `Given the file "P" is removed` | deletes it, or a directory and what it holds; one already gone is fine |
 | `Given a file "P" copied from "SRC"` | copies a file or a directory of the repository (the nearest directory holding pubrules.json, from where the suite started) to P: a fixture kept beside the suite. A SRC that is absolute, or that leads out of the repository, is refused |
 | `When the file "P" changes to:` + docstring | rewrites it, as a person would between two runs |
 | `Then the file "P" exists` / `does not exist` | |
@@ -153,12 +168,14 @@ regular expression would not.
 | `Then the exit code is N` | |
 | `Then it prints "T"` / `it does not print "T"` | stdout contains T, or not |
 | `Then it prints:` + docstring | stdout is the docstring |
-| `Then stdout is empty` | |
+| `Then stdout is empty` / `stderr is empty` | |
 | `Then stderr mentions "T"` / `stderr does not mention "T"` | |
 | `Then it prints the JSON:` + docstring | stdout reads as JSON, and is the docstring's |
 | `Then the JSON it prints has "K" equal to "V"` | the value at the dotted key K of what stdout reads as |
 | `Then it prints a line matching "P"` | some line of stdout is the pattern P |
 | `Then stderr has a line matching "P"` | some line of stderr is the pattern P |
+| `Then it prints no line matching "P"` | no line of stdout is the pattern P |
+| `Then stderr has no line matching "P"` | no line of stderr is the pattern P |
 
 ### Stand-in programs
 
@@ -178,6 +195,8 @@ gcloud without reaching them.
 | `Given "NAME" is not installed` | |
 | `Then "NAME" was run with "ARGS"` | some run had exactly these arguments |
 | `Then "NAME" was run with arguments matching "P"` | some run's arguments, joined by spaces, are the pattern P |
+| `Then "NAME" was not run with arguments matching "P"` | no run's arguments are the pattern P |
+| `Then "NAME" was run, in order, with arguments matching:` + docstring | a pattern a line: some runs, in this order, match them one by one, though other runs may come between |
 | `Then "NAME" read the input:` + docstring | some run of a stand-in that reads read exactly this |
 | `Then "NAME" read input including "T"` | |
 | `Then "NAME" was run N times` | |
@@ -193,9 +212,14 @@ takes a method, a path, headers and a body, and answers a status, headers
 (compared without case) and the body as text, its JSON read when a step asks.
 It does not follow redirects. The JSON steps send `application/json`, the
 form step `application/x-www-form-urlencoded`. pubtest ships adapters for an
-ASGI app (Starlette, FastAPI) and a WSGI app in Python, and for a `fetch`
-handler (a Cloudflare Worker) and a listening server in Node; none needs a
-dependency, so a suite that tests no service installs nothing for them.
+ASGI app (Starlette, FastAPI), a WSGI app and a listening server
+(`pubtest.http.url(base)`) in Python, and for a `fetch` handler (a
+Cloudflare Worker) and a listening server (`fromUrl(base)`) in Node; none
+needs a dependency, so a suite that tests no service installs nothing for
+them. The ASGI adapter gives the app what a server would: the path
+percent-decoded (`raw_path` as sent), a Content-Length with a body, and the
+connection kept until the answer is complete, so a streamed answer is read
+to its end.
 
 | Step | Does or checks |
 | --- | --- |
@@ -211,6 +235,7 @@ dependency, so a suite that tests no service installs nothing for them.
 | `When I send "METHOD" to "PATH" with the file "P"` | the file's bytes, as `application/octet-stream` unless a Given set the Content-Type |
 | `Then the answer is N` | the status |
 | `Then the answer's "H" is "V"` | a header |
+| `Then the answer's "H" includes "T"` | the header is there, and holds T |
 | `Then the answer has no "H"` | |
 | `Then the answer includes "T"` / `does not include "T"` | the body |
 | `Then the answer includes "T" once` | one line of the body holds T |
@@ -225,9 +250,12 @@ dependency, so a suite that tests no service installs nothing for them.
 | `Given the "NAME" service answers "METHOD PATH" with N` | |
 | `Given the "NAME" service answers "METHOD PATH" with N and:` + docstring | the body |
 | `Given the "NAME" service answers "METHOD PATH" with N and the header "H" set to "V"` | |
+| `Given the "NAME" service answers "METHOD PATH" with N, the header "H" set to "V", and:` + docstring | the header and the body |
 | `Then the "NAME" service was asked "METHOD PATH"` | |
 | `Then the "NAME" service was asked "METHOD PATH" N times` | |
 | `Then the "NAME" service was asked "METHOD PATH" with the header "H" set to "V"` | some such request carried it |
+| `Then the "NAME" service was asked "METHOD PATH" without the header "H"` | it was asked that, and no such request carried H |
+| `Then every request to the "NAME" service carried the header "H" set to "V"` | it was asked something, and every request carried it |
 | `Then the "NAME" service was sent:` + docstring | some request's body was this JSON |
 | `Then the "NAME" service was asked nothing` | |
 | `Then nothing was sent` | no fake service was asked anything |

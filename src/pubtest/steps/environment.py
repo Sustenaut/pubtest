@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
-from pytest_bdd import given, parsers
+from pytest_bdd import given
+
+from . import phrase
 
 
-@given(parsers.parse('the environment sets "{name}" to "{text}"'))
+@given(phrase('the environment sets "{name}" to "{text}"'))
 def sets(monkeypatch, name, text):
     monkeypatch.setenv(name, text)
 
 
-@given(parsers.parse('the environment does not set "{name}"'))
+@given(phrase('the environment does not set "{name}"'))
 def unsets(monkeypatch, name):
     monkeypatch.delenv(name, raising=False)

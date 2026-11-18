@@ -25,3 +25,18 @@ Feature: The Python adapters reach an ASGI app as they reach a WSGI one
   Scenario: A redirect, through ASGI, is not followed
     When I GET "/old"
     Then the answer redirects to "/new"
+
+  Scenario: A percent-encoded path, through ASGI, is decoded as a server decodes it
+    When I GET "/files/a%20b%2Fc"
+    Then the answer includes "path /files/a b/c raw /files/a%20b%2Fc"
+
+  Scenario: A body, through ASGI, comes with its Content-Length
+    Given a scratch directory
+    And a file "photo.bin" holding "not really a photo"
+    When I send "PUT" to "/upload" with the file "photo.bin"
+    Then the answer includes "PUT 19 bytes, length 19"
+
+  Scenario: A streamed answer, through ASGI, is read to its end
+    When I GET "/stream"
+    Then the answer is 200
+    And the answer includes "one two three"

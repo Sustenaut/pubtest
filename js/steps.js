@@ -32,6 +32,32 @@ function returned(ctx) {
   return ctx.result;
 }
 
+/** The refusal, read: a step that reads it marks it so. */
+function refusal(ctx) {
+  ctx.refusalRead = true;
+  check(ctx.refused, () => `it was not refused: the result is ${show(ctx.result)}`);
+  return ctx.refused;
+}
+
+/** The value at a dotted key, failing clearly when it is not there. */
+function at_(data, key, what) {
+  let here = data;
+  for (const part of key.split(".")) {
+    if (here === null || here === undefined || !(part in Object(here))) {
+      fail(`${what} has no ${key}: ${show(data)}`);
+    }
+    here = Array.isArray(here) ? here[Number(part)] : here[part];
+  }
+  return here;
+}
+
+/** A text's lines, as Python's splitlines gives them: no last empty one. */
+function lines(text) {
+  const all = (text ?? "").split(/\r\n|\n|\r/);
+  if (all.at(-1) === "") all.pop();
+  return all;
+}
+
 function rows(table) {
   return typeof table?.raw === "function" ? table.raw() : table?.data ?? table;
 }
@@ -316,6 +342,25 @@ export const STEPS = [
     check(matches(p, got), () => `the result ${JSON.stringify(got)} does not match ${JSON.stringify(p)}`);
   }],
   ["Then", "it is not refused", (ctx) => { ctx.refusalRead = true; check(!ctx.refused, () => `it was refused, saying ${ctx.refused.message}`); }],
+  ["Then", "the result's {string} includes {string}", (ctx, k, v) => { const got = at_(returned(ctx), k, "the result"); check(includes(got, v), () => `the result's ${k} ${show(got)} does not include ${v}`); }],
+  ["Then", "the result's {string} matches {string}", (ctx, k, p) => {
+    const got = at_(returned(ctx), k, "the result");
+    check(typeof got === "string", () => `the result's ${k} is ${show(got)}, not text`);
+    check(matches(p, got), () => `the result's ${k} ${JSON.stringify(got)} does not match ${JSON.stringify(p)}`);
+  }],
+  ["Then", "the refusal is a {string}", (ctx, name) => {
+    const error = refusal(ctx).error;
+    const classes = [];
+    for (let p = error === null || error === undefined ? null : Object.getPrototypeOf(Object(error)); p; p = Object.getPrototypeOf(p)) {
+      if (p.constructor?.name) classes.push(p.constructor.name);
+    }
+    check(classes.includes(name), () => `the refusal is a ${classes.join(" < ")}, not a ${name}`);
+  }],
+  ["Then", "the refusal's {string} is {string}", (ctx, k, v) => {
+    const r = refusal(ctx);
+    const got = k === "message" ? r.message : at_(r.error, k, "the refusal");
+    check(same(got, v), () => `the refusal's ${k} is ${show(got)}, not ${v}`);
+  }],
 
   // Files
   ["Given", "a scratch directory", (ctx) => {
@@ -391,12 +436,21 @@ export const STEPS = [
   ["Then", "it does not print {string}", (ctx, t) => check(!ctx.outcome?.stdout.includes(t), () => showRun(ctx.outcome))],
   ["Then", "it prints:", (ctx, doc) => check(ctx.outcome?.stdout.replace(/\n$/, "") === String(doc).replace(/\n$/, ""), () => showRun(ctx.outcome))],
   ["Then", "stdout is empty", (ctx) => check(ctx.outcome?.stdout === "", () => showRun(ctx.outcome))],
+  ["Then", "stderr is empty", (ctx) => check(ctx.outcome?.stderr === "", () => showRun(ctx.outcome))],
   ["Then", "stderr mentions {string}", (ctx, t) => check(ctx.outcome?.stderr.includes(t), () => showRun(ctx.outcome))],
   ["Then", "stderr does not mention {string}", (ctx, t) => check(!ctx.outcome?.stderr.includes(t), () => showRun(ctx.outcome))],
   ["Then", "it prints the JSON:", (ctx, doc) => { const got = printedJson(ctx); check(same(got, String(doc)), () => `it printed ${show(got)}, not:\n${doc}`); }],
   ["Then", "the JSON it prints has {string} equal to {string}", (ctx, k, v) => { const got = dig(printedJson(ctx), k); check(same(got, v), () => `the ${k} it printed is ${show(got)}, not ${v}`); }],
-  ["Then", "it prints a line matching {string}", (ctx, p) => check((ctx.outcome?.stdout ?? "").split("\n").some((l) => matches(p, l)), () => `no line matches ${JSON.stringify(p)}\n${showRun(ctx.outcome)}`)],
-  ["Then", "stderr has a line matching {string}", (ctx, p) => check((ctx.outcome?.stderr ?? "").split("\n").some((l) => matches(p, l)), () => `no line of stderr matches ${JSON.stringify(p)}\n${showRun(ctx.outcome)}`)],
+  ["Then", "it prints a line matching {string}", (ctx, p) => check(lines(ctx.outcome?.stdout).some((l) => matches(p, l)), () => `no line matches ${JSON.stringify(p)}\n${showRun(ctx.outcome)}`)],
+  ["Then", "stderr has a line matching {string}", (ctx, p) => check(lines(ctx.outcome?.stderr).some((l) => matches(p, l)), () => `no line of stderr matches ${JSON.stringify(p)}\n${showRun(ctx.outcome)}`)],
+  ["Then", "it prints no line matching {string}", (ctx, p) => {
+    const found = lines(ctx.outcome?.stdout).filter((l) => matches(p, l));
+    check(found.length === 0, () => `lines match ${JSON.stringify(p)}: ${show(found)}\n${showRun(ctx.outcome)}`);
+  }],
+  ["Then", "stderr has no line matching {string}", (ctx, p) => {
+    const found = lines(ctx.outcome?.stderr).filter((l) => matches(p, l));
+    check(found.length === 0, () => `lines of stderr match ${JSON.stringify(p)}: ${show(found)}\n${showRun(ctx.outcome)}`);
+  }],
 
   // Stand-in programs
   ["Given", "a stand-in {string}", (ctx, n) => { standins(ctx).add(n); refreshPath(ctx); }],
@@ -420,6 +474,18 @@ export const STEPS = [
   ["Then", "{string} was run {int} times", (ctx, n, k) => { const runs = ctx.standins?.runs(n) ?? []; check(runs.length === k, `${n} ran ${runs.length} times`); }],
   ["Then", "{string} was not run", (ctx, n) => { const runs = ctx.standins?.runs(n) ?? []; check(runs.length === 0, `${n} ran with ${show(runs)}`); }],
   ["Then", "{string} was run with arguments matching {string}", (ctx, n, p) => { const runs = ctx.standins?.runs(n) ?? []; check(runs.some((r) => matches(p, r.join(" "))), `${n} ran with ${show(runs)}`); }],
+  ["Then", "{string} was not run with arguments matching {string}", (ctx, n, p) => { const found = (ctx.standins?.runs(n) ?? []).filter((r) => matches(p, r.join(" "))); check(found.length === 0, `${n} ran with ${show(found)}`); }],
+  ["Then", "{string} was run, in order, with arguments matching:", (ctx, n, doc) => {
+    // Some runs, in this order, though others may come between them, match the lines one by one.
+    const patterns = String(doc).split("\n").map((l) => l.trim()).filter(Boolean);
+    const runs = (ctx.standins?.runs(n) ?? []).map((r) => r.join(" "));
+    let i = 0;
+    const missing = patterns.find((p) => {
+      while (i < runs.length) if (matches(p, runs[i++])) return false;
+      return true;
+    });
+    check(missing === undefined, () => `${n} ran with nothing matching ${JSON.stringify(missing)} in order; it ran: ${show(runs)}`);
+  }],
   ["Then", "{string} read the input:", (ctx, n, doc) => { const got = ctx.standins?.inputs(n) ?? []; check(got.map((i) => i.replace(/\n$/, "")).includes(String(doc).replace(/\n$/, "")), `${n} read ${show(got)}`); }],
   ["Then", "{string} read input including {string}", (ctx, n, t) => { const got = ctx.standins?.inputs(n) ?? []; check(got.some((i) => i.includes(t)), `${n} read ${show(got)}`); }],
   ["Then", "nothing was run", (ctx) => { const runs = ctx.standins?.runs() ?? []; check(runs.length === 0, `ran: ${show(runs)}`); }],
@@ -444,6 +510,7 @@ export const STEPS = [
   }],
   ["Then", "the answer is {int}", (ctx, s) => { const a = answer(ctx); check(a.status === s, () => showAnswer(a)); }],
   ["Then", "the answer's {string} is {string}", (ctx, h, v) => { const a = answer(ctx); check(a.header(h) === v, () => showAnswer(a)); }],
+  ["Then", "the answer's {string} includes {string}", (ctx, h, t) => { const a = answer(ctx); const got = a.header(h); check(got !== undefined && got.includes(t), () => showAnswer(a)); }],
   ["Then", "the answer has no {string}", (ctx, h) => { const a = answer(ctx); check(a.header(h) === undefined, () => showAnswer(a)); }],
   ["Then", "the answer includes {string} once", (ctx, t) => { const a = answer(ctx); check(a.text.split("\n").filter((l) => l.includes(t)).length === 1, () => showAnswer(a)); }],
   ["Then", "the answer includes {string}", (ctx, t) => { const a = answer(ctx); check(a.text.includes(t), () => showAnswer(a)); }],
@@ -456,6 +523,7 @@ export const STEPS = [
   ["Given", "the {string} service answers {string} with {int}", async (ctx, n, r, s) => (await fake(ctx, n)).answer(r, s)],
   ["Given", "the {string} service answers {string} with {int} and:", async (ctx, n, r, s, doc) => (await fake(ctx, n)).answer(r, s, String(doc))],
   ["Given", "the {string} service answers {string} with {int} and the header {string} set to {string}", async (ctx, n, r, s, h, v) => (await fake(ctx, n)).answer(r, s, "", { [h]: v })],
+  ["Given", "the {string} service answers {string} with {int}, the header {string} set to {string}, and:", async (ctx, n, r, s, h, v, doc) => (await fake(ctx, n)).answer(r, s, String(doc), { [h]: v })],
   ["Given", "the answers recorded in {string}", async (ctx, dir) => {
     let base = path.join(ctx.directory ?? process.cwd(), dir);
     if (!fs.existsSync(base)) base = dir;
@@ -471,6 +539,19 @@ export const STEPS = [
   ["Then", "the {string} service was asked {string} with the header {string} set to {string}", (ctx, n, r, h, v) => {
     const seen = requests(ctx, n, r).map((q) => q.headers[h.toLowerCase()]);
     check(seen.includes(v), `${n} was asked ${r} with ${h} ${show(seen)}`);
+  }],
+  ["Then", "the {string} service was asked {string} without the header {string}", (ctx, n, r, h) => {
+    // It was asked METHOD PATH, and no such request carried the header.
+    const found = requests(ctx, n, r);
+    check(found.length > 0, `${n} was not asked ${r}`);
+    const seen = found.map((q) => q.headers[h.toLowerCase()]).filter((v) => v !== undefined);
+    check(seen.length === 0, `${n} was asked ${r} with ${h} ${show(seen)}`);
+  }],
+  ["Then", "every request to the {string} service carried the header {string} set to {string}", (ctx, n, h, v) => {
+    const all = asked(ctx, n);
+    check(all.length > 0, `${n} was asked nothing`);
+    const wrong = all.filter((q) => q.headers[h.toLowerCase()] !== v).map((q) => `${q.method} ${q.path}: ${JSON.stringify(q.headers[h.toLowerCase()])}`);
+    check(wrong.length === 0, `not every request to ${n} carried ${h} ${JSON.stringify(v)}: ${show(wrong)}`);
   }],
   ["Then", "the {string} service was sent:", (ctx, n, doc) => {
     const bodies = asked(ctx, n).map((q) => { try { return JSON.parse(q.body); } catch { return q.body; } });
@@ -536,6 +617,7 @@ const WRAPPERS = [
   (s) => function (a, b, c) { return s(this.pubtest, a, b, c); },
   (s) => function (a, b, c, d) { return s(this.pubtest, a, b, c, d); },
   (s) => function (a, b, c, d, e) { return s(this.pubtest, a, b, c, d, e); },
+  (s) => function (a, b, c, d, e, f) { return s(this.pubtest, a, b, c, d, e, f); },
 ];
 
 /**

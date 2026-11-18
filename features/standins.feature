@@ -59,3 +59,14 @@ Feature: Stand-in programs in place of real ones
     And "kubectl" read input including "name: web"
     And "kubectl" was run with arguments matching "apply -f - *"
     And "kubectl" was run with "apply -f - --server-side"
+
+  Scenario: Runs in order, others between them, and a run that did not happen
+    Given a stand-in "kubectl"
+    When I run "sh -c 'kubectl get pods; kubectl apply -f web.yaml; kubectl rollout status deploy/web'"
+    Then "kubectl" was run, in order, with arguments matching:
+      """
+      get *
+      rollout status *
+      """
+    And "kubectl" was not run with arguments matching "delete *"
+    And "kubectl" was not run with arguments matching "apply"

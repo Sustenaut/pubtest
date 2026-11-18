@@ -9,7 +9,10 @@ import shutil
 import sys
 from pathlib import Path
 
-from pytest_bdd import given, parsers, then
+from pytest_bdd import given, then
+
+from ..core import matches
+from . import phrase
 
 # What a stand-in-only PATH still holds: the shell's basic tools.
 BASIC = ("sh", "bash", "env", "cat", "echo", "printf", "mkdir", "rm", "cp", "mv", "chmod", "ls", "sed",
@@ -113,31 +116,31 @@ def _refresh(pubtest_ctx) -> None:
     os.environ["PATH"] = pubtest_ctx.standins.path()
 
 
-@given(parsers.re(r'a stand-in "(?P<name>[^"]+)"'))
+@given(phrase('a stand-in "{name}"'))
 def standin(pubtest_ctx, tmp_path, name):
     standins(pubtest_ctx, tmp_path).add(name)
     _refresh(pubtest_ctx)
 
 
-@given(parsers.parse('a stand-in "{name}" that prints "{text}"'))
+@given(phrase('a stand-in "{name}" that prints "{text}"'))
 def standin_prints(pubtest_ctx, tmp_path, name, text):
     standins(pubtest_ctx, tmp_path).add(name, out=text + "\n")
     _refresh(pubtest_ctx)
 
 
-@given(parsers.parse('a stand-in "{name}" that prints:'))
+@given(phrase('a stand-in "{name}" that prints:'))
 def standin_prints_text(pubtest_ctx, tmp_path, name, docstring):
     standins(pubtest_ctx, tmp_path).add(name, out=docstring + "\n")
     _refresh(pubtest_ctx)
 
 
-@given(parsers.parse('a stand-in "{name}" that fails, saying "{text}"'))
+@given(phrase('a stand-in "{name}" that fails, saying "{text}"'))
 def standin_fails(pubtest_ctx, tmp_path, name, text):
     standins(pubtest_ctx, tmp_path).add(name, err=text + "\n", code=1)
     _refresh(pubtest_ctx)
 
 
-@given(parsers.parse('a stand-in "{name}" that answers in turn:'))
+@given(phrase('a stand-in "{name}" that answers in turn:'))
 def standin_turns(pubtest_ctx, tmp_path, name, datatable):
     """A row per answer: args (a pattern, * for any), and optionally exit,
     stdout and stderr. A run takes the first matching answer not yet given,
@@ -154,7 +157,7 @@ def standin_turns(pubtest_ctx, tmp_path, name, datatable):
     _refresh(pubtest_ctx)
 
 
-@given(parsers.parse('a stand-in "{name}" that reads its input'))
+@given(phrase('a stand-in "{name}" that reads its input'))
 def standin_reads(pubtest_ctx, tmp_path, name):
     """Reads its standard input to the end, as `kubectl apply -f -` does, and
     keeps it for `read the input`. Only a stand-in that reads waits for it."""
@@ -168,7 +171,7 @@ def only_standins(pubtest_ctx, tmp_path):
     _refresh(pubtest_ctx)
 
 
-@given(parsers.parse('"{name}" is not installed'))
+@given(phrase('"{name}" is not installed'))
 def not_installed(pubtest_ctx, tmp_path, name):
     found = standins(pubtest_ctx, tmp_path)
     found.remove(name)
@@ -176,19 +179,19 @@ def not_installed(pubtest_ctx, tmp_path, name):
     _refresh(pubtest_ctx)
 
 
-@then(parsers.parse('"{name}" was run with "{args}"'))
+@then(phrase('"{name}" was run with "{args}"'))
 def run_with(pubtest_ctx, name, args):
     import shlex  # noqa: PLC0415
     runs = pubtest_ctx.standins.runs(name)
     assert shlex.split(args) in runs, f"{name} ran with {runs}"
 
 
-@then(parsers.parse('"{name}" was run {count:d} times'))
+@then(phrase('"{name}" was run {count:d} times'))
 def run_times(pubtest_ctx, name, count):
     assert len(pubtest_ctx.standins.runs(name)) == count, f"{name} ran {len(pubtest_ctx.standins.runs(name))} times"
 
 
-@then(parsers.parse('"{name}" was not run'))
+@then(phrase('"{name}" was not run'))
 def not_run(pubtest_ctx, name):
     runs = pubtest_ctx.standins.runs(name) if getattr(pubtest_ctx, "standins", None) else []
     assert not runs, f"{name} ran with {runs}"
@@ -200,20 +203,41 @@ def nothing_run(pubtest_ctx):
     assert not runs, f"ran: {runs}"
 
 
-@then(parsers.parse('"{name}" was run with arguments matching "{pattern}"'))
+def _runs(pubtest_ctx, name: str) -> list[list[str]]:
+    return pubtest_ctx.standins.runs(name) if getattr(pubtest_ctx, "standins", None) else []
+
+
+@then(phrase('"{name}" was run with arguments matching "{pattern}"'))
 def run_matching(pubtest_ctx, name, pattern):
-    from ..core import matches  # noqa: PLC0415
-    runs = pubtest_ctx.standins.runs(name)
+    runs = _runs(pubtest_ctx, name)
     assert any(matches(pattern, " ".join(args)) for args in runs), f"{name} ran with {runs}"
 
 
-@then(parsers.parse('"{name}" read the input:'))
+@then(phrase('"{name}" was not run with arguments matching "{pattern}"'))
+def not_run_matching(pubtest_ctx, name, pattern):
+    runs = _runs(pubtest_ctx, name)
+    found = [args for args in runs if matches(pattern, " ".join(args))]
+    assert not found, f"{name} ran with {found}"
+
+
+@then(phrase('"{name}" was run, in order, with arguments matching:'))
+def run_in_order(pubtest_ctx, name, docstring):
+    """Each line of the docstring is a pattern; some runs, in this order,
+    though others may come between them, match them one by one."""
+    patterns = [line.strip() for line in docstring.splitlines() if line.strip()]
+    runs = [" ".join(args) for args in _runs(pubtest_ctx, name)]
+    left = iter(runs)
+    missing = next((p for p in patterns if not any(matches(p, run) for run in left)), None)
+    assert missing is None, f"{name} ran with nothing matching {missing!r} in order; it ran: {runs}"
+
+
+@then(phrase('"{name}" read the input:'))
 def read_input(pubtest_ctx, name, docstring):
     inputs = pubtest_ctx.standins.inputs(name)
     assert docstring.removesuffix("\n") in [i.removesuffix("\n") for i in inputs], f"{name} read {inputs}"
 
 
-@then(parsers.parse('"{name}" read input including "{text}"'))
+@then(phrase('"{name}" read input including "{text}"'))
 def read_input_including(pubtest_ctx, name, text):
     inputs = pubtest_ctx.standins.inputs(name)
     assert any(text in i for i in inputs), f"{name} read {inputs}"

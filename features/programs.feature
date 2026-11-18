@@ -56,3 +56,10 @@ Feature: Programs, run as a person runs them
     When I run "sh -c 'cat log.txt; echo warning: disk 91% full >&2'"
     Then it prints a line matching "released v* at *"
     And stderr has a line matching "warning: * full"
+
+  Scenario: No line matched, and nothing on stderr
+    Given a file "log.txt" holding "released v1.2.3"
+    When I run "cat log.txt"
+    Then stderr is empty
+    And it prints no line matching "failed*"
+    And stderr has no line matching "*"

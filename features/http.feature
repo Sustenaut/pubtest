@@ -80,3 +80,16 @@ Feature: HTTP: requests to the service under test, and fake services it calls
       """
       {"echo": {"a": 2}}
       """
+
+  Scenario: A fake service's header and body together, and the headers it was sent
+    Given a fake "weather" service
+    And the "weather" service answers "GET /today" with 200, the header "X-Sky" set to "clear", and:
+      """
+      {"sky": "clear"}
+      """
+    When I GET "/forecast"
+    Then the answer's "X-Sky" is "clear"
+    And the answer's "content-type" includes "text"
+    And the answer includes "clear"
+    And the "weather" service was asked "GET /today" without the header "Authorization"
+    And every request to the "weather" service carried the header "X-Client" set to "pubtest-app"
