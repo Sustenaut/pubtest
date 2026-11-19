@@ -2,7 +2,7 @@
   "claims": {
     "identity": {
       "class": "archival",
-      "content": "pubtest 0.2.1 is released as v0.2.1 from commit ee4cb1cc40fa1f03437be2f885b409a422ecf233.",
+      "content": "pubtest 0.2.2 is released as v0.2.2 from commit 08b8e169dc26f3031d09adfd3cf3476f5b8731a0.",
       "data": {
         "columns": [
           {
@@ -27,25 +27,25 @@
         "rows": [
           [
             "pubtest",
-            "0.2.1",
+            "0.2.2",
             "",
             "",
-            "v0.2.1",
-            "ee4cb1cc40fa1f03437be2f885b409a422ecf233"
+            "v0.2.2",
+            "08b8e169dc26f3031d09adfd3cf3476f5b8731a0"
           ]
         ]
       },
-      "scope": "the published release v0.2.1 of pubtest",
+      "scope": "the published release v0.2.2 of pubtest",
       "sources": [
         {
           "ref": "pubtest",
-          "revision": "ee4cb1cc40fa1f03437be2f885b409a422ecf233"
+          "revision": "08b8e169dc26f3031d09adfd3cf3476f5b8731a0"
         }
       ]
     },
     "release": {
       "class": "archival",
-      "content": "pubtest 0.2.1 was released on 2026-11-17 from commit ee4cb1cc40fa1f03437be2f885b409a422ecf233 with these changes.",
+      "content": "pubtest 0.2.2 was released on 2026-11-19 from commit 08b8e169dc26f3031d09adfd3cf3476f5b8731a0 with these changes.",
       "data": {
         "columns": [
           {
@@ -57,32 +57,32 @@
         ],
         "rows": [
           [
-            "internal",
-            "The suite-ctx scenario's inner suite no longer turns off a pytest plugin named pubkit, which nothing installs since pubkit became pubrules"
+            "fixed",
+            "Every quoted value may be empty (\"\") in Python, as in Node; a check after a second When reads that When; the ASGI adapter decodes the path, sends Content-Length and keeps the connection so a streamed answer is read whole; removing a file already gone is fine in Python; Python fake services stop at once"
           ],
           [
             "added",
-            "More steps: the JSON and matched lines a program prints, a text result matched by a pattern (only `*` is special), YAML files, files copied from the repository, executable files and what a directory holds, fake services' headers and counts, requests with headers and any method's body or a file's bytes, commits, bare remotes and tags, and stand-ins that read their input or are run with matching arguments"
+            "Steps for a refusal's class and fields, a result key's includes and matches, an answer header's includes, stderr is empty, lines not matched, stand-in runs not matched or in order, a fake service's header and body together, a request without a header or every request with one; pubtest.http.url for a listening server in Python; TypeScript declarations for the npm package"
           ],
           [
-            "internal",
-            "The Node steps' coverage (c8, coverage/lcov.info) goes to SonarQube Cloud beside the Python's"
+            "fixed",
+            "Python reads \\\" and \\\\\\\\ in a quoted value as cucumber does, and takes a bare quote inside one where no step reads the text otherwise"
           ]
         ]
       },
       "depends": [
         "#identity"
       ],
-      "scope": "the published release v0.2.1 of pubtest",
+      "scope": "the published release v0.2.2 of pubtest",
       "sources": [
         {
           "ref": "pubtest",
-          "revision": "ee4cb1cc40fa1f03437be2f885b409a422ecf233"
+          "revision": "08b8e169dc26f3031d09adfd3cf3476f5b8731a0"
         }
       ]
     }
   },
-  "created": "2026-11-17T00:00:00Z",
+  "created": "2026-11-19T00:00:00Z",
   "sections": [
     {
       "heading": "Identity",

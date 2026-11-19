@@ -1,4 +1,0 @@
-{
-  "category": "fixed",
-  "change": "Python reads \\\" and \\\\\\\\ in a quoted value as cucumber does, and takes a bare quote inside one where no step reads the text otherwise"
-}
