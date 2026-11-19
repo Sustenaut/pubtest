@@ -60,6 +60,8 @@ export class Context {
     this.recorded = [];
     this.standins = null;
     this.answer = null;
+    // The record/replay harness's tape for the scenario (cassettes.js), when it is on.
+    this.tape = null;
     this.cleanups = [];
   }
   get result() {

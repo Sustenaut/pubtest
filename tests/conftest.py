@@ -5,14 +5,17 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import urllib.request
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import parse_qs
 
 import pytest
-from pytest_bdd import parsers, then, when
+from pytest_bdd import given, parsers, then, when
 
 import pubtest.http
+from pubtest import cassettes
 from pubtest.steps import phrase
 
 os.environ.setdefault("GREET_BIN_DIR", str(Path(__file__).parent / "bin"))
@@ -211,3 +214,115 @@ def property_ran(inner, pytester, count):
 def suite_refused(inner, text):
     said = inner.stdout.str() + inner.stderr.str()
     assert inner.ret == pytest.ExitCode.USAGE_ERROR and text in said, said
+
+
+# --- calls to outside services (integrations.feature, recording.feature) ---------
+
+os.environ.setdefault("PUBTEST_BIN_DIR", str(Path(sys.executable).parent))
+
+
+class ExampleNetwork:
+    """What record mode records through in pubtest's own suite: GitHub's shape of
+    answer, {"name": the URL's last part, "updated_at": now}, never the network."""
+
+    def send(self, request, timeout):
+        from integrations.calls import Response  # noqa: PLC0415
+        body = {"name": request.url.rstrip("/").rsplit("/", 1)[-1],
+                "updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
+        return Response(200, json.dumps(body).encode(), headers={"Content-Type": "application/json"})
+
+
+cassettes.network = ExampleNetwork
+
+
+def example_get(url):
+    from integrations.calls import Caller, Request  # noqa: PLC0415
+    return Caller("pubtest", "suite").call("github.repo-ops", "call", Request("GET", url)).json()
+
+
+@when(phrase('the example client gets "{url}"'))
+def example_client_gets(ctx, url):
+    ctx.attempt(lambda: example_get(url))
+
+
+@when(phrase('the example client gets the repository "{logical}"'))
+def example_client_gets_repository(ctx, logical):
+    real = ctx.tape.names_of("pubtest.example")[logical]
+    ctx.attempt(lambda: example_get(f"https://api.github.com/repos/pubtest-example/{real}"))
+
+
+INNER_SUITE = '''import json
+import os
+from datetime import datetime, timezone
+from pathlib import Path
+
+from integrations.calls import Caller, Request, Response
+from pytest_bdd import scenarios, when
+
+from pubtest import cassettes
+from pubtest.steps import phrase
+
+scenarios(".")
+os.environ["PATH"] = str(Path(__file__).parent.parent / "bin") + os.pathsep + os.environ["PATH"]
+
+
+class Network:
+    def send(self, request, timeout):
+        body = {"name": request.url.rstrip("/").rsplit("/", 1)[-1],
+                "updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
+        return Response(200, json.dumps(body).encode(), headers={"Content-Type": "application/json"})
+
+
+cassettes.network = Network
+
+
+@when(phrase('the inner client gets "{url}"'))
+def gets(ctx, url):
+    ctx.attempt(lambda: Caller("inner", "suite").call("github.repo-ops", "call", Request("GET", url)).json())
+'''
+
+INNER_CLIENT = '''#!{python}
+import json
+import sys
+
+from integrations.calls import Caller, Request
+
+print(json.dumps(Caller("inner", "program").call("github.repo-ops", "call", Request("GET", sys.argv[1])).json()))
+'''
+
+# What a harness sets for the programs it runs, which an inner suite must not inherit.
+HARNESS = ("PUBTEST_RUN", "INTEGRATIONS_MODE", "INTEGRATIONS_CASSETTE", "INTEGRATIONS_CASSETTES",
+           "INTEGRATIONS_CASSETTE_REPORT", "PUBTEST_ONLY", "PUBTEST_PLAN", "PUBTEST_RECORD", "PUBTEST_CASSETTES")
+
+
+@given(phrase('an inner suite with the feature "{name}":'))
+def inner_suite(ctx, name, docstring):
+    root = ctx.directory
+    (root / "features").mkdir(exist_ok=True)
+    (root / "features" / name).write_text(docstring + "\n", encoding="utf-8")
+    (root / "tests").mkdir(exist_ok=True)
+    (root / "tests" / "pytest.ini").write_text(
+        "[pytest]\nbdd_features_base_dir = ../features/\naddopts = -p no:pubrules -p no:cacheprovider\n", encoding="utf-8")
+    (root / "tests" / "test_inner.py").write_text(INNER_SUITE, encoding="utf-8")
+    (root / "bin").mkdir(exist_ok=True)
+    client = root / "bin" / "inner-client"
+    client.write_text(INNER_CLIENT.replace("{python}", sys.executable), encoding="utf-8")
+    client.chmod(0o755)
+
+
+@when("the inner suite runs")
+def inner_suite_runs(ctx):
+    import subprocess  # noqa: PLC0415
+    from pubtest.core import Result  # noqa: PLC0415
+    env = {k: v for k, v in os.environ.items() if k not in HARNESS}
+    ctx.acting()
+    argv = [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider"]
+    done = subprocess.run(argv, cwd=ctx.directory / "tests", env=env, capture_output=True, text=True, check=False,
+                          timeout=300)
+    ctx.ran(Result(code=done.returncode, stdout=done.stdout, stderr=done.stderr, argv=argv))
+
+
+@then(phrase('the inner run says "{text}"'))
+def inner_run_says(ctx, text):
+    said = ctx.outcome.stdout + ctx.outcome.stderr
+    assert text in said, said

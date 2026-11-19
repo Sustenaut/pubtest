@@ -265,10 +265,42 @@ to its end.
 
 ### Recorded answers
 
+To be replaced by cassettes; goes when release-controlplane moves (step 2, PR 5).
+pub-site's site.feature and site-storage.feature read it too.
+
 | Step | Does or checks |
 | --- | --- |
 | `Given the answers recorded in "DIR"` | each JSON file in DIR, in name order, is one answer, `{"service", "method", "path", "status", "body"}`: the fake service it names (made if need be) answers that request with it |
 | `Then every recorded answer was used` | |
+
+### Calls to outside services: faults and counts
+
+With the record/replay harness on ([Record and replay](#record-and-replay)),
+each scenario's calls through an integrations `Caller` go through its
+transport: a fault put on it, then its cassette. NAME is a plugin's id
+(`github.edit-pr`) or what the ids it stands for start with, before a dot
+(`github` is every `github.*` plugin). A fault decides every call to NAME it
+matches; the first that matches decides, and a call none decides goes to the
+cassette.
+
+| Step | Does or checks |
+| --- | --- |
+| `Given the "NAME" integration can't be reached` | every call to NAME has no answer (`Faulty`'s `no-answer`) |
+| `Given the "NAME" integration does not answer in time` | every call to NAME answers slower than its timeout, so it has none; the scenario's clock moves on by the timeout, and nothing waits |
+| `Given the "NAME" integration answers "METHOD PATH" with N and:` + docstring | each such call to NAME answers N with that body; PATH is a pattern in which `*` is anything |
+| `Given the "NAME" integration answers with N, then as recorded` | the first call to NAME answers N, with no body; the next are answered by the cassette |
+| `Given the "NAME" integration answers with what is not JSON` | each call to NAME answers the recorded answer's first half, then text no parser reads |
+| `Given the cassette of "SCENARIO"` | the scenario replays another's cassette ("FILE.feature: TITLE", or a TITLE of this feature's), as a fault scenario does over the recording of the scenario it breaks. It never records, and its unused calls are not checked. The tag `@cassette:STEM/SLUG`, the other's cassette path without `.json`, does the same: a tag holds no space |
+| `Then the Caller slept N seconds` | the Callers waited N seconds between tries, in all (N may have a fraction) |
+| `Then "NAME" was called N times` | calls to NAME, each try counted |
+
+The clock: in replay a scenario's Callers sleep on its clock, which moves on
+and never waits, as `Faulty`'s slow answers move it, and their jitter is half
+its range, so a call tried four times waits 0.5 + 1 + 2 seconds. In Python
+every `Caller` made during the scenario gets that clock, sleep and jitter by
+default; in Node a suite passes them, `new Caller(repo, app,
+callerOptions(ctx))` (`@sustenaut/pubtest/cassettes`), since integrations'
+JS Caller has no default to set. In record mode a sleep waits.
 
 ### Secrets
 
@@ -290,6 +322,126 @@ to its end.
 | `Then the working tree is clean` | nothing changed or untracked |
 | `Then the tag "T" exists` | |
 | `Then the remote "NAME" has the branch "B"` | |
+
+## Record and replay
+
+A suite that calls outside services through integrations' `Caller` replays
+their answers: one cassette per scenario, in integrations' format
+(`integrations.cassette/1`, with its `current` and `baseline`), recorded by
+running the scenario against the real services.
+
+**On or off.** The harness is on when integrations is installed (Python:
+`integrations.transports` imports, `pip install 'pubtest[integrations]'` or
+the suite's own pin; Node: `@sustenaut/integrations`, an optional peer) and
+the repository turns it on in pubrules.json:
+
+```json
+"pubtest": {"cassettes": true}
+```
+
+`true` keeps cassettes in the data repository, `../<repo>-data/` beside the
+repository, private, under `integrations/cassettes/`; a path, such as
+`"tests/cassettes"`, keeps them in the repository itself. `PUBTEST_CASSETTES=1`
+turns it on whatever pubrules.json says, and `0` off. Off, nothing here
+happens, and the steps above fail saying so.
+
+**Modes.** A session replays, unless `PUBTEST_RECORD=1`, when it records. The
+harness sets, for the session and every program it runs:
+
+| Variable | Value |
+| --- | --- |
+| `PUBTEST_RUN` | the run's id: integrations refuses every call in a mode other than live without it |
+| `INTEGRATIONS_MODE` | `replay` or `record` |
+| `INTEGRATIONS_CASSETTES` | the cassettes directory, which every cassette must be inside |
+| `INTEGRATIONS_CASSETTE` | the scenario's cassette, for a program it runs; while recording, a file of the program's own |
+| `INTEGRATIONS_CASSETTE_REPORT` | where a program it runs writes which recorded calls it used |
+| `PYTHONPATH`, `NODE_OPTIONS` | load pubtest's report hook (below) into a Python or Node program |
+
+and reads `PUBTEST_ONLY` (a JSON list of scenarios: only they run) and
+`PUBTEST_PLAN` (a file each scenario writes whether its cassette is out of
+date to), which `pubtest record` sets.
+
+**Where a cassette is.** `INTEGRATIONS_CASSETTES` when it is set, else the
+directory pubrules.json names, else the data repository's. In it, a scenario's
+cassette is `<feature stem>/<slug>.json`, and an Examples row's
+`<feature stem>/<slug>/<row>.json`, the row counted from 1. The slug is the
+title (an outline's as written, its `<placeholders>` and all), lower-cased,
+each run of anything but a-z and 0-9 one `-`, none at either end. The
+scenario is named `FILE.feature: TITLE`, and an Examples row
+`FILE.feature: TITLE #ROW`: the name in a cassette's `scenario`, in each
+message, and what `pubtest record` takes (or the title alone, or the stem in
+place of the file name).
+
+**Each scenario.** In replay it runs on `use(Cassette(...))`, under the faults
+its Givens put on it (`Faulty`), its cassette read at its first call. When it
+passes, a recorded call that neither it nor a program it ran made fails it, as
+does a call that had no recording, even one the code caught. In record mode it
+runs on `use(Recorder(network, ...))`, saved when it passes: a scenario that
+made no call has no cassette (its old one goes), and a program it ran that
+made the calls gives the scenario its recording. Both it and a program making
+calls is refused: a cassette holds one process's calls. A recording keeps,
+in `current.recorded`, the integrations release, the consumer (`<repo>@<commit>`)
+and, under `pubtest`, the hash of the scenario's text (each step's text,
+docstring and table), the hash of its step code (Python: each step function's
+source; Node: every file of the suite's support code under features/, test/
+and tests/), and the names its test customers gave.
+
+**Programs a scenario runs.** A program learns its cassette from
+`INTEGRATIONS_MODE` and `INTEGRATIONS_CASSETTE`. At exit, a Python or Node
+program that replayed calls appends to `INTEGRATIONS_CASSETTE_REPORT` which
+recorded calls it used, how many calls it made and how many were answered: a
+`sitecustomize` pubtest puts first on `PYTHONPATH` (it runs the program's own
+sitecustomize after it), and a module `NODE_OPTIONS=--import` loads, which
+answers the program's calls through a Cassette of its own. A program run with
+`python -I` or `-S`, or in another language, is not reported, and the faults a
+scenario's Givens put on its transport do not reach a program.
+
+**Errors.**
+
+| Message | When |
+| --- | --- |
+| ``no data repo: `pubtest record --all` creates it`` | at the start of a replay with no cassettes directory |
+| ``no cassette for SCENARIO: record it (`pubtest record "SCENARIO"`)`` | the scenario made a call, and has no cassette |
+| `no recorded call in SCENARIO for …`, then the nearest recorded call and how it differs | integrations' `NoSnapshot`: a call its cassette has no recording of |
+| `N recorded calls in SCENARIO never made:` | when it passes, the calls no process made |
+| `N calls a program made had no recording in SCENARIO` | a program's calls its cassette could not answer |
+| `ModeError`, `CassettePathError`, `SecretInRecording` | integrations': a mode without its variables, a cassette outside the cassettes directory, a secret a recording would hold |
+
+**Test customers.** A package gives the steps and the record-time setup of the
+test customers a suite records with (the GitHub one is integrations'): in
+Python an entry point in the group `pubtest.customers`, a module (or object)
+loaded as a pytest plugin, so its steps are the suite's; in Node an entry of
+`register(api, { customers: [...] })`. Each has a `name`, `steps` (Node:
+`[kind, expression, (ctx, ...args) => ...]`; Python: its module's own
+step functions), `setup(tape)` and `cleanup(tape, names)`. In record mode the
+first step that asks for a customer's names (`tape.names_of(name)`; Node
+`await ctx.tape.namesOf(name)`) runs its setup, which makes or finds what the
+scenario needs and returns the names it stands for, `{"the repository":
+"real-name"}`; its cleanup runs when the scenario ends, passed or failed. The
+names are kept in the cassette, so replay gives the same ones and runs no
+setup.
+
+**`pubtest record`.** A command in the Python package and the npm package:
+
+```sh
+pubtest record --all                  # every scenario
+pubtest record --changed              # the scenarios whose cassette is out of date
+pubtest record "FILE.feature: TITLE"  # these scenarios
+pubtest record --rename OLD NEW       # move OLD's cassette to NEW's name; records nothing
+```
+
+It runs the repository's suite with `PUBTEST_RECORD=1`, pytest-bdd for a
+Python repository and cucumber-js for a Node one (pubrules.json's
+`ci.language`, else the command's own language), only the scenarios chosen,
+and says which cassettes it wrote. `--changed` first runs the suite in replay
+and records each scenario that has no cassette though it makes calls, no
+longer fits its cassette, or whose text, step code or integrations release
+differ from what its cassette's `current.recorded` says; a scenario that
+makes no call is never out of date. With no data repository it prints the
+`gh repo create OWNER/<repo>-data --private --clone` it needs and stops;
+`--create-data-repo` runs it, then commits the repository's README,
+`pubrules.json` (`{"kind": "content"}`) and `integrations.json` (excluding
+everything) and pushes them.
 
 ## What a suite writes itself
 

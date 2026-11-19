@@ -29,5 +29,8 @@
         "name": "pub-signing-key-pubtest"
       }
     }
-  ]
+  ],
+  "pubtest": {
+    "cassettes": "tests/cassettes"
+  }
 }

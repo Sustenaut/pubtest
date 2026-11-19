@@ -75,6 +75,30 @@ cucumber.When("the planner plans {string}", function (week) {
 For quickpickle, pass its module and `{ runner: "quickpickle" }`, and load the
 file through vitest's `setupFiles`.
 
+## Record and replay
+
+A suite that calls outside services through integrations' `Caller` replays
+what they answered: one cassette per scenario, recorded with
+`pubtest record`, in the data repository beside the repository
+(`../<repo>-data/integrations/cassettes/`). Turn it on in pubrules.json:
+
+```json
+"pubtest": {"cassettes": true}
+```
+
+and install integrations beside pubtest: `pubtest[integrations]` in Python,
+`@sustenaut/integrations` (an optional peer) in Node. pubtest itself never
+depends on integrations, whose own suite runs on pubtest. Then:
+
+```sh
+pubtest record --all          # record every scenario's calls
+pubtest record --changed      # only those whose cassette is out of date
+```
+
+and the failure steps (`Given the "github" integration can't be reached`)
+break a scenario's calls on purpose, over its cassette. GRAMMAR.md, "Record
+and replay", has the modes, variables, paths, errors and test customers.
+
 ## Developing
 
 ```sh
@@ -85,7 +109,10 @@ npm test             # the same features under cucumber-js, then quickpickle
 
 `features/` is the library's own suite, the steps a suite would write are in
 `tests/conftest.py` and `test/suite.js` (the same texts in both), and
-`tests/python-features/` holds the Python-only adapter scenarios. A change to
+`tests/python-features/` holds the Python-only adapter scenarios. The suite
+turns cassettes on, kept in `tests/cassettes/`, and its example test customer
+is in `tests/customers/` and `test/customer.js`; `pubtest record --all`
+records them again, through a stand-in for the network. A change to
 a step changes GRAMMAR.md, both packages and a feature, in one pull request,
 and records itself with `pubrel add`. Releases are cut with `pubrel prepare`
 from a checkout whose `corpus/.publet` holds the release key.

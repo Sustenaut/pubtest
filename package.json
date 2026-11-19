@@ -12,11 +12,20 @@
     "./http": {
       "types": "./js/http.d.ts",
       "default": "./js/http.js"
+    },
+    "./cassettes": {
+      "types": "./js/cassettes.d.ts",
+      "default": "./js/cassettes.js"
     }
   },
   "types": "./js/index.d.ts",
+  "bin": {
+    "pubtest": "js/cli.js"
+  },
   "files": [
     "js",
+    "src/pubtest/_child/*.mjs",
+    "src/pubtest/_child/*.py",
     "GRAMMAR.md"
   ],
   "repository": {
@@ -29,8 +38,17 @@
   "scripts": {
     "test": "c8 --reporter=lcovonly --reporter=text-summary --report-dir=coverage --temp-directory=node_modules/.c8 --include=js cucumber-js && vitest run"
   },
+  "peerDependencies": {
+    "@sustenaut/integrations": "github:Sustenaut/integrations#v0.16.0"
+  },
+  "peerDependenciesMeta": {
+    "@sustenaut/integrations": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@cucumber/cucumber": "13.3.0",
+    "@sustenaut/integrations": "github:Sustenaut/integrations#v0.16.0",
     "c8": "12.0.0",
     "quickpickle": "1.11.2",
     "vitest": "4.1.12",

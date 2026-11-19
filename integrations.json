@@ -21,7 +21,11 @@
       "plugin": "github.repo-ops",
       "paths": [
         ".github/workflows/wheel.yml",
-        "scripts/go-live.sh"
+        "scripts/go-live.sh",
+        "js/cli.js",
+        "src/pubtest/cli.py",
+        "test/suite.js",
+        "tests/conftest.py"
       ],
       "mode": "required"
     },
@@ -37,6 +41,10 @@
     {
       "path": "corpus/**",
       "reason": "Release records, not code"
+    },
+    {
+      "path": "tests/cassettes/**",
+      "reason": "Recorded answers the suite replays, not code"
     }
   ]
 }

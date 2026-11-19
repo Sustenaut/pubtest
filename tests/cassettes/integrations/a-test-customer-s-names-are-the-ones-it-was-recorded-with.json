@@ -1,0 +1,53 @@
+{
+ "format": "integrations.cassette/1",
+ "scenario": "integrations.feature: A test customer's names are the ones it was recorded with",
+ "current": {
+  "recorded": {
+   "at": "2026-11-19T19:28:29Z",
+   "integrations": "0.16.0",
+   "consumer": "pubtest@dea8d0a3acc41adbf73034cf9e87f3fa84a00c8a",
+   "pubtest": {
+    "scenario": "02d47f0d8a00008dd34dad29a3c55679500f14643bd29c8ab39c892b611136ce",
+    "steps": "bfeaacc7e84134f3359ade8d66585ff4cb4dddc5fff7a390db2087d12b5c9fac",
+    "names": {
+     "pubtest.example": {
+      "the repository": "pubtest-example-1"
+     }
+    }
+   }
+  },
+  "volatile": {
+   "⟦integrations:date:1⟧": {
+    "kind": "date",
+    "first": "calls.0.response.body.updated_at"
+   }
+  },
+  "calls": [
+   {
+    "kind": "http",
+    "plugin": "github.repo-ops",
+    "operation": "call",
+    "request": {
+     "method": "GET",
+     "url": "https://api.github.com/repos/pubtest-example/pubtest-example-1",
+     "headers": {},
+     "body": null
+    },
+    "response": {
+     "status": 200,
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "body": {
+      "json": {
+       "name": "pubtest-example-1",
+       "updated_at": "⟦integrations:date:1⟧"
+      }
+     }
+    },
+    "elapsed_ms": 0
+   }
+  ]
+ },
+ "baseline": null
+}
