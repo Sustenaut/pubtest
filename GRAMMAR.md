@@ -92,7 +92,10 @@ carries anything longer. Paths are relative to the scratch directory.
 
 A quoted value may be empty: `the environment sets "N" to ""` sets N to the
 empty text, and `the result's "K" is ""` holds for an empty text. A quote
-inside a value is written `\"`. A suite writing a step of its own with a
+inside a value is written `\"`, and a backslash `\\`, in Python as in Node.
+Python also takes a bare quote inside a value (`holding "{"kind": "x"}"`) when
+no step reads the text with the value ending at an earlier quote; Node's
+cucumber expressions don't, so a suite run in both escapes it. A suite writing a step of its own with a
 quoted value in Python can use `pubtest.steps.phrase('… "{name}" …')` in
 place of `parsers.parse`, which matches the same way, `""` too.
 

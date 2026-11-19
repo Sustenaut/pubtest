@@ -48,3 +48,12 @@ Feature: What only the Python side has
     Then the refusal is a "builtins.ZeroDivisionError"
     And the refusal is a "ArithmeticError"
     And the refusal's "message" is "division by zero"
+
+  Scenario: A bare quote inside a quoted value is part of the value, in Python
+    Python's steps let a value hold bare quotes, such as a line of JSON,
+    where cucumber's {string} needs them escaped.
+    Given a scratch directory
+    And a file "pubrules.json" holding "{"kind": "utility", "ci": {}}"
+    When I run "cat pubrules.json"
+    Then the JSON in "pubrules.json" has "kind" equal to "utility"
+    And it prints "{"kind": "utility", "ci": {}}"

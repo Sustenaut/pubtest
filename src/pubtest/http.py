@@ -85,7 +85,9 @@ def asgi(app: Callable[..., Any]) -> Client:
     As a server does, it gives the app the path percent-decoded (`raw_path`
     the bytes as sent), a Content-Length for a body, and the body; then it
     keeps the connection until the answer is complete, so an app listening
-    for the client to leave (a streamed answer) is not cut short."""
+    for the client to leave (a streamed answer) is not cut short. The client
+    leaves only once the answer is complete: an app that waits for
+    `http.disconnect` before it answers at all waits forever here."""
 
     def send(method: str, path: str, headers: Mapping[str, str], body: bytes | None) -> Answer:
         url = urlsplit(path)

@@ -29,3 +29,10 @@ Feature: An empty quoted value is a value
     And stderr is empty
     And "tool" was run with ""
     And "tool" was run with arguments matching ""
+
+  Scenario: An escaped quote and an escaped backslash in a quoted value are a quote and a backslash
+    Given a file "said.txt" holding "say \"hi\""
+    When I run "cat said.txt"
+    Then it prints "say \"hi\""
+    And the file "said.txt" holds "say \"hi\""
+    And the file "said.txt" does not include "\\"
