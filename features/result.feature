@@ -64,3 +64,25 @@ Feature: The result: what an action came to, checked in the same words everywher
     When I give back the text "build 42 passed"
     Then the result matches "build * passed"
     And the result matches "*"
+
+  Scenario: A key of the result, included or matched
+    When I describe the release
+    Then the result's "tags" includes "lts"
+    And the result's "version" includes "1.2"
+    And the result's "version" matches "v*.*.3"
+
+  Scenario: A refusal's class, a class it derives from, and its fields
+    When I look up "colour"
+    Then the refusal is a "NotFound"
+    And the refusal is a "Problem"
+    And the refusal's "key" is "colour"
+    And the refusal's "detail.code" is "404"
+    And the refusal's "message" is "no colour"
+
+  Scenario: A second action is the one later steps read
+    When I run "echo first"
+    Then it prints "first"
+    When I run main with "Ann"
+    Then it succeeds
+    And it prints "ok"
+    And it does not print "first"

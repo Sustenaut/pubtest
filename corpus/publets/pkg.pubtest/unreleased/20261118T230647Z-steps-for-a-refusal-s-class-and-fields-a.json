@@ -1,0 +1,4 @@
+{
+  "category": "added",
+  "change": "Steps for a refusal's class and fields, a result key's includes and matches, an answer header's includes, stderr is empty, lines not matched, stand-in runs not matched or in order, a fake service's header and body together, a request without a header or every request with one; pubtest.http.url for a listening server in Python; TypeScript declarations for the npm package"
+}

@@ -1,0 +1,4 @@
+{
+  "category": "fixed",
+  "change": "Every quoted value may be empty (\"\") in Python, as in Node; a check after a second When reads that When; the ASGI adapter decodes the path, sends Content-Length and keeps the connection so a streamed answer is read whole; removing a file already gone is fine in Python; Python fake services stop at once"
+}

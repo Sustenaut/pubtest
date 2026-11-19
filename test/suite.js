@@ -54,6 +54,17 @@ export function suite(define) {
     });
   });
 
+  class Problem extends Error {}
+  class NotFound extends Problem {
+    constructor(key) {
+      super(`no ${key}`);
+      this.key = key;
+      this.detail = { code: 404 };
+    }
+  }
+  define("When", "I look up {string}", function (key) { return this.attempt(() => { throw new NotFound(key); }); });
+  define("When", "I describe the release", function () { return this.attempt(() => ({ version: "v1.2.3", tags: ["stable", "lts"], note: "" })); });
+
   function main(argv) {
     if (argv[0]?.startsWith("--")) {
       console.error("usage: main [NAME]");

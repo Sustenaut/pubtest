@@ -13,6 +13,7 @@ import pytest
 from pytest_bdd import parsers, then, when
 
 import pubtest.http
+from pubtest.steps import phrase
 
 os.environ.setdefault("GREET_BIN_DIR", str(Path(__file__).parent / "bin"))
 
@@ -27,7 +28,7 @@ def more(ctx, a, b):
     ctx.attempt(lambda: a > b)
 
 
-@when(parsers.parse('I give back the text "{text}"'))
+@when(phrase('I give back the text "{text}"'))
 def give_back(ctx, text):
     ctx.attempt(lambda: text)
 
@@ -55,6 +56,29 @@ def nothing(ctx):
 @when(parsers.parse("I divide {a:d} by {b:d}"))
 def divide(ctx, a, b):
     ctx.attempt(lambda: a / b)
+
+
+class Problem(Exception):
+    """The base of the suite's own refusals."""
+
+
+class NotFound(Problem):
+    def __init__(self, key):
+        super().__init__(f"no {key}")
+        self.key = key
+        self.detail = {"code": 404}
+
+
+@when(phrase('I look up "{key}"'))
+def look_up(ctx, key):
+    def lookup():
+        raise NotFound(key)
+    ctx.attempt(lookup)
+
+
+@when("I describe the release")
+def describe_release(ctx):
+    ctx.attempt(lambda: {"version": "v1.2.3", "tags": ["stable", "lts"], "note": ""})
 
 
 def main(argv):

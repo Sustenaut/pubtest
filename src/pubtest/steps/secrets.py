@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import json
 
-from pytest_bdd import given, parsers, then
+from pytest_bdd import given, then
 
 from ..core import files_in
+from . import phrase
 
 
-@given(parsers.parse('the secret "{text}"'))
+@given(phrase('the secret "{text}"'))
 def secret(pubtest_ctx, text):
     pubtest_ctx.secrets.append(text)
 

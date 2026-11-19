@@ -49,7 +49,7 @@ import pubtest.http
 
 @pytest.fixture
 def http_client():
-    return pubtest.http.asgi(create_app())   # or pubtest.http.wsgi(app)
+    return pubtest.http.asgi(create_app())   # or .wsgi(app), or .url("http://127.0.0.1:8000")
 ```
 
 ## Node

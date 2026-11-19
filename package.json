@@ -5,9 +5,16 @@
   "license": "Apache-2.0",
   "type": "module",
   "exports": {
-    ".": "./js/index.js",
-    "./http": "./js/http.js"
+    ".": {
+      "types": "./js/index.d.ts",
+      "default": "./js/index.js"
+    },
+    "./http": {
+      "types": "./js/http.d.ts",
+      "default": "./js/http.js"
+    }
   },
+  "types": "./js/index.d.ts",
   "files": [
     "js",
     "GRAMMAR.md"

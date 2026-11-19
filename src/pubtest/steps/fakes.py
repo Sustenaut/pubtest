@@ -7,7 +7,9 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from pytest_bdd import given, parsers, then
+from pytest_bdd import given, then
+
+from . import phrase
 
 
 class Fake:
@@ -44,7 +46,8 @@ class Fake:
                 pass
 
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        # A short poll, so the scenario's end does not wait half a second on it.
+        threading.Thread(target=self.server.serve_forever, kwargs={"poll_interval": 0.02}, daemon=True).start()
 
     @property
     def url(self) -> str:
@@ -72,27 +75,32 @@ def fake(pubtest_ctx, monkeypatch, name: str) -> Fake:
     return pubtest_ctx.fakes[name]
 
 
-@given(parsers.parse('a fake "{name}" service'))
+@given(phrase('a fake "{name}" service'))
 def fake_service(pubtest_ctx, monkeypatch, name):
     fake(pubtest_ctx, monkeypatch, name)
 
 
-@given(parsers.parse('the "{name}" service answers "{request}" with {status:d}'))
+@given(phrase('the "{name}" service answers "{request}" with {status:d}'))
 def answers(pubtest_ctx, monkeypatch, name, request, status):
     fake(pubtest_ctx, monkeypatch, name).answer(request, status)
 
 
-@given(parsers.parse('the "{name}" service answers "{request}" with {status:d} and:'))
+@given(phrase('the "{name}" service answers "{request}" with {status:d} and:'))
 def answers_with(pubtest_ctx, monkeypatch, name, request, status, docstring):
     fake(pubtest_ctx, monkeypatch, name).answer(request, status, docstring)
 
 
-@given(parsers.parse('the "{name}" service answers "{request}" with {status:d} and the header "{header}" set to "{value}"'))
+@given(phrase('the "{name}" service answers "{request}" with {status:d} and the header "{header}" set to "{value}"'))
 def answers_with_header(pubtest_ctx, monkeypatch, name, request, status, header, value):
     fake(pubtest_ctx, monkeypatch, name).answer(request, status, "", {header: value})
 
 
-@given(parsers.parse('the answers recorded in "{directory}"'))
+@given(phrase('the "{name}" service answers "{request}" with {status:d}, the header "{header}" set to "{value}", and:'))
+def answers_with_header_and(pubtest_ctx, monkeypatch, name, request, status, header, value, docstring):
+    fake(pubtest_ctx, monkeypatch, name).answer(request, status, docstring, {header: value})
+
+
+@given(phrase('the answers recorded in "{directory}"'))
 def recorded(pubtest_ctx, monkeypatch, directory):
     """Each JSON file in the directory, in name order, is one answer:
     {"service", "method", "path", "status", "body"}."""
@@ -114,7 +122,7 @@ def _asked(pubtest_ctx, name: str) -> list[dict]:
     return fakes[name].requests
 
 
-@then(parsers.re(r'the "(?P<name>[^"]+)" service was asked "(?P<request>[^"]+)"'))
+@then(phrase('the "{name}" service was asked "{request}"'))
 def was_asked(pubtest_ctx, name, request):
     asked = [f"{r['method']} {r['path']}" for r in _asked(pubtest_ctx, name)]
     assert request in asked or request in [a.split("?")[0] for a in asked], f"{name} was asked {asked}"
@@ -127,20 +135,42 @@ def _requests(pubtest_ctx, name: str, request: str) -> list[dict]:
             if request in (f"{r['method']} {r['path']}", f"{r['method']} {r['path'].split('?')[0]}")]
 
 
-@then(parsers.parse('the "{name}" service was asked "{request}" {count:d} times'))
+def _header(request: dict, header: str) -> str | None:
+    return {k.lower(): v for k, v in request["headers"].items()}.get(header.lower())
+
+
+@then(phrase('the "{name}" service was asked "{request}" {count:d} times'))
 def asked_times(pubtest_ctx, name, request, count):
     found = _requests(pubtest_ctx, name, request)
     assert len(found) == count, f"{name} was asked {request} {len(found)} times"
 
 
-@then(parsers.parse('the "{name}" service was asked "{request}" with the header "{header}" set to "{value}"'))
+@then(phrase('the "{name}" service was asked "{request}" with the header "{header}" set to "{value}"'))
 def asked_with_header(pubtest_ctx, name, request, header, value):
     found = _requests(pubtest_ctx, name, request)
-    seen = [{k.lower(): v for k, v in r["headers"].items()}.get(header.lower()) for r in found]
+    seen = [_header(r, header) for r in found]
     assert value in seen, f"{name} was asked {request} with {header} {seen}"
 
 
-@then(parsers.parse('the "{name}" service was sent:'))
+@then(phrase('the "{name}" service was asked "{request}" without the header "{header}"'))
+def asked_without_header(pubtest_ctx, name, request, header):
+    """It was asked METHOD PATH, and no such request carried the header."""
+    found = _requests(pubtest_ctx, name, request)
+    assert found, f"{name} was not asked {request}"
+    seen = [_header(r, header) for r in found if _header(r, header) is not None]
+    assert not seen, f"{name} was asked {request} with {header} {seen}"
+
+
+@then(phrase('every request to the "{name}" service carried the header "{header}" set to "{value}"'))
+def every_request_carried(pubtest_ctx, name, header, value):
+    """It was asked something, and each request carried the header with this value."""
+    asked = _asked(pubtest_ctx, name)
+    assert asked, f"{name} was asked nothing"
+    wrong = [f"{r['method']} {r['path']}: {_header(r, header)!r}" for r in asked if _header(r, header) != value]
+    assert not wrong, f"not every request to {name} carried {header} {value!r}: {wrong}"
+
+
+@then(phrase('the "{name}" service was sent:'))
 def was_sent(pubtest_ctx, name, docstring):
     want = json.loads(docstring)
     bodies = []
@@ -152,7 +182,7 @@ def was_sent(pubtest_ctx, name, docstring):
     assert want in bodies, f"{name} was sent {bodies}"
 
 
-@then(parsers.parse('the "{name}" service was asked nothing'))
+@then(phrase('the "{name}" service was asked nothing'))
 def asked_nothing(pubtest_ctx, name):
     assert not _asked(pubtest_ctx, name), f"{name} was asked {_asked(pubtest_ctx, name)}"
 

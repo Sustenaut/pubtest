@@ -63,9 +63,10 @@ Feature: Files in a scratch directory
     And I run "cat a.txt"
     Then it prints "z"
 
-  Scenario: A removed file is gone
+  Scenario: A removed file is gone, and one never there is removed without complaint
     Given a file "gone.txt" holding "x"
     And the file "gone.txt" is removed
+    And the file "never-there.txt" is removed
     When I run "ls"
     Then the file "gone.txt" does not exist
     And it does not print "gone.txt"
