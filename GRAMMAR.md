@@ -321,8 +321,7 @@ their answers: one cassette per scenario, in integrations' format
 running the scenario against the real services.
 
 **On or off.** The harness is on when integrations is installed (Python:
-`integrations.transports` imports, `pip install 'pubtest[integrations]'` or
-the suite's own pin; Node: `@sustenaut/integrations`, an optional peer) and
+`integrations.transports` imports: the suite's own pin of it; Node: `@sustenaut/integrations`, an optional peer) and
 the repository turns it on in pubrules.json:
 
 ```json
