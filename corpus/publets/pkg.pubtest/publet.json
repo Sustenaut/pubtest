@@ -2,7 +2,7 @@
   "claims": {
     "identity": {
       "class": "archival",
-      "content": "pubtest 0.2.2 is released as v0.2.2 from commit 08b8e169dc26f3031d09adfd3cf3476f5b8731a0.",
+      "content": "pubtest 0.3.0 is released as v0.3.0 from commit 127342c07c375c66ece0a75715c4ce8019a35547.",
       "data": {
         "columns": [
           {
@@ -27,25 +27,25 @@
         "rows": [
           [
             "pubtest",
-            "0.2.2",
+            "0.3.0",
             "",
             "",
-            "v0.2.2",
-            "08b8e169dc26f3031d09adfd3cf3476f5b8731a0"
+            "v0.3.0",
+            "127342c07c375c66ece0a75715c4ce8019a35547"
           ]
         ]
       },
-      "scope": "the published release v0.2.2 of pubtest",
+      "scope": "the published release v0.3.0 of pubtest",
       "sources": [
         {
           "ref": "pubtest",
-          "revision": "08b8e169dc26f3031d09adfd3cf3476f5b8731a0"
+          "revision": "127342c07c375c66ece0a75715c4ce8019a35547"
         }
       ]
     },
     "release": {
       "class": "archival",
-      "content": "pubtest 0.2.2 was released on 2026-11-19 from commit 08b8e169dc26f3031d09adfd3cf3476f5b8731a0 with these changes.",
+      "content": "pubtest 0.3.0 was released on 2026-11-20 from commit 127342c07c375c66ece0a75715c4ce8019a35547 with these changes.",
       "data": {
         "columns": [
           {
@@ -57,32 +57,28 @@
         ],
         "rows": [
           [
-            "fixed",
-            "Every quoted value may be empty (\"\") in Python, as in Node; a check after a second When reads that When; the ASGI adapter decodes the path, sends Content-Length and keeps the connection so a streamed answer is read whole; removing a file already gone is fine in Python; Python fake services stop at once"
-          ],
-          [
             "added",
-            "Steps for a refusal's class and fields, a result key's includes and matches, an answer header's includes, stderr is empty, lines not matched, stand-in runs not matched or in order, a fake service's header and body together, a request without a header or every request with one; pubtest.http.url for a listening server in Python; TypeScript declarations for the npm package"
+            "Record and replay for calls through integrations' Caller: a cassette per scenario (pubtest.cassettes, @sustenaut/pubtest/cassettes), on when integrations is installed and pubrules.json sets \"pubtest\": {\"cassettes\": ...} (a \"DIR\" only for a suite whose record transport is a stand-in: recording the real network into one warns); programs a scenario runs replay from it and report the calls they used; the pubtest record command (--all, --changed, scenarios, --rename, --create-data-repo) in both packages; failure steps on integrations' Faulty (can't be reached, does not answer in time, answers \"M P\" with N and:, answers with N then as recorded, answers with what is not JSON), the cassette of \"SCENARIO\" and @cassette:, the Caller slept N seconds, \"NAME\" was called N times; test customers (pubtest.customers entry points, register(api, { customers })); the pubtest[integrations] extra and an optional @sustenaut/integrations peer"
           ],
           [
-            "fixed",
-            "Python reads \\\" and \\\\\\\\ in a quoted value as cucumber does, and takes a bare quote inside one where no step reads the text otherwise"
+            "removed",
+            "the answers recorded in DIR and every recorded answer was used are gone: record cassettes with pubtest record"
           ]
         ]
       },
       "depends": [
         "#identity"
       ],
-      "scope": "the published release v0.2.2 of pubtest",
+      "scope": "the published release v0.3.0 of pubtest",
       "sources": [
         {
           "ref": "pubtest",
-          "revision": "08b8e169dc26f3031d09adfd3cf3476f5b8731a0"
+          "revision": "127342c07c375c66ece0a75715c4ce8019a35547"
         }
       ]
     }
   },
-  "created": "2026-11-19T00:00:00Z",
+  "created": "2026-11-20T00:00:00Z",
   "sections": [
     {
       "heading": "Identity",
