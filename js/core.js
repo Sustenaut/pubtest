@@ -57,9 +57,10 @@ export class Context {
     this.headers = {};
     this.programs = {};
     this.fakes = {};
-    this.recorded = [];
     this.standins = null;
     this.answer = null;
+    // The record/replay harness's tape for the scenario (cassettes.js), when it is on.
+    this.tape = null;
     this.cleanups = [];
   }
   get result() {
@@ -240,6 +241,35 @@ export function repository(start = process.cwd()) {
     if (up === dir) return path.resolve(start);
     dir = up;
   }
+}
+
+/** Strings in UTF-16 code-unit order: the order sort() gives with no compare
+ * function, written out. */
+export function byCodeUnit(a, b) {
+  if (a < b) return -1;
+  return a > b ? 1 : 0;
+}
+
+/** A program's absolute path: the first executable file NAME in one of PATH's
+ * absolute directories, or null. Spawning that path, not the bare name, keeps a
+ * relative or empty PATH entry (the working directory) from choosing the
+ * program. It is looked up on each call, not cached: a scenario's stand-ins
+ * change PATH between scenarios. */
+export function onPath(name, env = process.env) {
+  if (path.isAbsolute(name)) return name;
+  for (const dir of (env.PATH ?? "").split(path.delimiter)) {
+    if (!path.isAbsolute(dir)) continue;
+    const found = path.join(dir, name);
+    try {
+      if (fs.existsSync(found) && fs.statSync(found).isFile()) {
+        fs.accessSync(found, fs.constants.X_OK);
+        return found;
+      }
+    } catch {
+      // there, but not something to run
+    }
+  }
+  return null;
 }
 
 /** A YAML text's document, or the list of its documents when it holds more

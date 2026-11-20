@@ -6,7 +6,7 @@
       "setup": "make venv && npm ci --ignore-scripts",
       "test": "make functional && npm audit --package-lock-only && npm test && shellcheck scripts/*.sh",
       "coverage-report": "coverage/",
-      "sonar-args": "-Dsonar.javascript.lcov.reportPaths=coverage-download/lcov.info -Dsonar.coverage.exclusions=test/**,tests/**"
+      "sonar-args": "-Dsonar.javascript.lcov.reportPaths=../../_temp/coverage-download/lcov.info -Dsonar.coverage.exclusions=test/**,tests/**"
     },
     "release": {}
   },
@@ -29,5 +29,8 @@
         "name": "pub-signing-key-pubtest"
       }
     }
-  ]
+  ],
+  "pubtest": {
+    "cassettes": "tests/cassettes"
+  }
 }

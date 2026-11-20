@@ -1,8 +1,11 @@
 // Types for @sustenaut/pubtest (index.js): the steps every Sustenaut suite shares (GRAMMAR.md).
 import type { Answer, Client } from "./http.js";
+import type { Customer, Tape } from "./cassettes.js";
 
 export { Answer, fromFetch, fromUrl } from "./http.js";
 export type { Body, Client } from "./http.js";
+export { callerOptions } from "./cassettes.js";
+export type { Customer, Tape } from "./cassettes.js";
 
 /** What an action raised. */
 export class Refused {
@@ -37,6 +40,8 @@ export class Context {
   recorded: unknown[];
   standins: unknown;
   answer: Answer | null;
+  /** The record/replay harness's tape for the scenario, when it is on. */
+  tape: Tape | null;
   cleanups: Array<() => unknown>;
   client?: Client;
   identityHeader?: string;
@@ -69,6 +74,10 @@ export interface RegisterOptions {
   client?: (world: any) => Client;
   /** The header a signed-in person's email comes in (x-forwarded-email). */
   identityHeader?: string;
+  /** The test customers the suite records with. */
+  customers?: Customer[];
+  /** The transport record mode records through: the network unless a suite's tests of recording say otherwise. */
+  network?: { fetch(url: string, init?: any): Promise<Response> };
 }
 
 /** Define pubtest's steps with a runner's API: cucumber-js's module, or quickpickle's. */

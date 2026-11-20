@@ -13,6 +13,14 @@ requires-python = ">=3.11"
 authors = [{ name = "David Schryer", email = "schryer@gmail.com" }]
 dependencies = ["pytest>=8", "pytest-bdd>=8.1"]
 
+[project.optional-dependencies]
+# The record/replay harness (pubtest.cassettes), inert without it. Optional, so
+# integrations' own suite, which runs on pubtest, makes no cycle.
+integrations = ["integrations @ https://github.com/Sustenaut/integrations/releases/download/v0.16.0/integrations-0.16.0-py3-none-any.whl"]
+
+[project.scripts]
+pubtest = "pubtest.cli:main"
+
 [project.urls]
 Repository = "https://github.com/Sustenaut/pubtest"
 
@@ -22,8 +30,17 @@ pubtest = "pubtest.plugin"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+# What a program a scenario runs loads, to report the recorded calls it used.
+pubtest = ["_child/*.py", "_child/*.mjs"]
+
 [tool.coverage.run]
-source = ["pubtest"]
+# The package, not a directory named pubtest: a scenario's scratch directory
+# has one (its stand-ins), which coverage would otherwise measure too.
+source_pkgs = ["pubtest"]
+# src/pubtest/_child, which `make functional` names: what a program a scenario
+# runs loads as sitecustomize, outside the package's module names.
+source_dirs = ["${PUBTEST_CHILD_DIR}"]
 patch = ["subprocess"]
 parallel = true
 

@@ -6,6 +6,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { binVar, Context, deepEqual, dig, filesIn, includes, isEmpty, matches, repository, Result, same, show, split, yamlDocuments } from "./core.js";
+import { fromPickle, fromQuickpickle, matchesName, NEVER, selected, settings, standInOnly, startSession, supportHash, Tape, textHash, transports } from "./cassettes.js";
 
 const BASIC = ["sh", "bash", "env", "cat", "echo", "printf", "mkdir", "rm", "cp", "mv", "chmod", "ls", "sed",
   "grep", "head", "tail", "tr", "cut", "sort", "uniq", "wc", "dirname", "basename", "mktemp", "date",
@@ -21,6 +22,12 @@ function check(ok, message) {
 
 function at(ctx, p) {
   return path.join(ctx.directory ?? process.cwd(), p);
+}
+
+/** The scenario's tape: its cassette, faults and calls (cassettes.js). */
+function tape(ctx) {
+  check(ctx.tape, 'the integration steps need the record/replay harness: install @sustenaut/integrations and set "pubtest": {"cassettes": ...} in pubrules.json (GRAMMAR.md, "Record and replay")');
+  return ctx.tape;
 }
 
 function returned(ctx) {
@@ -524,16 +531,6 @@ export const STEPS = [
   ["Given", "the {string} service answers {string} with {int} and:", async (ctx, n, r, s, doc) => (await fake(ctx, n)).answer(r, s, String(doc))],
   ["Given", "the {string} service answers {string} with {int} and the header {string} set to {string}", async (ctx, n, r, s, h, v) => (await fake(ctx, n)).answer(r, s, "", { [h]: v })],
   ["Given", "the {string} service answers {string} with {int}, the header {string} set to {string}, and:", async (ctx, n, r, s, h, v, doc) => (await fake(ctx, n)).answer(r, s, String(doc), { [h]: v })],
-  ["Given", "the answers recorded in {string}", async (ctx, dir) => {
-    let base = path.join(ctx.directory ?? process.cwd(), dir);
-    if (!fs.existsSync(base)) base = dir;
-    for (const file of fs.readdirSync(base).filter((f) => f.endsWith(".json")).sort()) {
-      const e = JSON.parse(fs.readFileSync(path.join(base, file), "utf8"));
-      const body = typeof e.body === "string" ? e.body : JSON.stringify(e.body ?? "");
-      (await fake(ctx, e.service)).answer(`${e.method} ${e.path}`, e.status, body);
-      ctx.recorded.push(e);
-    }
-  }],
   ["Then", "the {string} service was asked {string}", (ctx, n, r) => { const a = asked(ctx, n).map((q) => `${q.method} ${q.path}`); check(a.includes(r) || a.map((x) => x.split("?")[0]).includes(r), `${n} was asked ${show(a)}`); }],
   ["Then", "the {string} service was asked {string} {int} times", (ctx, n, r, k) => { const got = requests(ctx, n, r).length; check(got === k, `${n} was asked ${r} ${got} times`); }],
   ["Then", "the {string} service was asked {string} with the header {string} set to {string}", (ctx, n, r, h, v) => {
@@ -559,10 +556,19 @@ export const STEPS = [
   }],
   ["Then", "the {string} service was asked nothing", (ctx, n) => check(asked(ctx, n).length === 0, `${n} was asked ${show(asked(ctx, n))}`)],
   ["Then", "nothing was sent", (ctx) => { const sent = Object.values(ctx.fakes).filter((f) => f.requests.length); check(sent.length === 0, `sent: ${sent.map((f) => f.name)}`); }],
-  ["Then", "every recorded answer was used", (ctx) => {
-    const used = new Set(Object.values(ctx.fakes).flatMap((f) => f.requests.map((r) => `${r.method} ${r.path}`)));
-    const unused = ctx.recorded.map((e) => `${e.method} ${e.path}`).filter((r) => !used.has(r));
-    check(unused.length === 0, `not used: ${unused}`);
+
+  // Calls to outside services: NAME is a plugin's id, or a prefix ("github" is every github.* plugin)
+  ["Given", "the {string} integration can't be reached", (ctx, n) => tape(ctx).fault(n, "no-answer")],
+  ["Given", "the {string} integration does not answer in time", (ctx, n) => tape(ctx).fault(n, `slow ${NEVER}`)],
+  ["Given", "the {string} integration answers {string} with {int} and:", (ctx, n, r, s, doc) => tape(ctx).fault(n, `status ${s}`, { where: r, body: String(doc) })],
+  ["Given", "the {string} integration answers with {int}, then as recorded", (ctx, n, s) => tape(ctx).fault(n, `status ${s}`, { nth: "first" })],
+  ["Given", "the {string} integration answers with what is not JSON", (ctx, n) => tape(ctx).fault(n, "malformed")],
+  ["Given", "the cassette of {string}", (ctx, scenario) => tape(ctx).borrow(scenario)],
+  ["Then", "the Caller slept {float} seconds", (ctx, n) => { const got = tape(ctx).clock.slept; check(Math.abs(got - n) < 1e-9, `the Caller slept ${got} seconds`); }],
+  ["Then", "{string} was called {int} times", (ctx, n, k) => {
+    // Each try counts: a call tried three times was called three times.
+    const made = tape(ctx).requests.filter((p) => matchesName(n, p));
+    check(made.length === k, `${n} was called ${made.length} times: ${show(tape(ctx).requests)}`);
   }],
 
   // Secrets
@@ -629,21 +635,51 @@ const WRAPPERS = [
  *   register(cucumber, { client: () => fromFetch(worker.fetch) });
  *
  * `client` makes the scenario's HTTP client; `identityHeader` is the header
- * a signed-in person's email comes in (X-Forwarded-Email).
+ * a signed-in person's email comes in (X-Forwarded-Email). `customers` are the
+ * test customers a suite records with ({ name, steps, setup, cleanup });
+ * `network` is the transport record mode records through, the network unless a
+ * suite's tests of recording say otherwise.
  */
-export function register(api, { runner = "cucumber", client, identityHeader = "x-forwarded-email" } = {}) {
+export function register(api, { runner = "cucumber", client, identityHeader = "x-forwarded-email", customers = [], network } = {}) {
   const quick = runner === "quickpickle";
   const root = repository();
-  const begin = (world) => {
+  const byName = Object.fromEntries(customers.map((c) => [c.name, c]));
+  let found = null;
+  let support = null;
+  const session = async () => {
+    if (found === null) {
+      found = await settings(root);
+      startSession(found);
+      const warning = standInOnly(found, network === undefined);
+      if (warning) console.error(warning);
+    }
+    return found;
+  };
+  const begin = async (world, info) => {
     world.pubtest = new Context();
     world.pubtest.identityHeader = identityHeader.toLowerCase();
     world.pubtest.repository = root;
     if (client) world.pubtest.client = client(world);
     world.attempt = (action) => world.pubtest.attempt(action);
+    const harness = await session();
+    if (!harness.active) return undefined;
+    const scenario = await info();
+    if (!scenario) return undefined;
+    if (!selected(scenario.scenario)) return "skipped";
+    const t = await transports();
+    const tape = new Tape(t, harness, scenario.scenario, scenario.tags, textHash(scenario.steps), { network, customers: byName, steps: (support ??= supportHash(root)) });
+    tape.begin();
+    world.pubtest.tape = tape;
+    return undefined;
   };
-  const end = async (world) => {
+  const end = async (world, failed) => {
     const ctx = world.pubtest;
     try {
+      if (ctx.tape) {
+        ctx.tape.failed = failed;
+        const problems = await ctx.tape.end();
+        if (problems.length && !failed) throw new Error(problems.join("\n"));
+      }
       if (ctx.refused && !ctx.refusalRead) {
         throw new Error(`the action was refused, and no step read it: ${ctx.refused.error?.stack ?? ctx.refused.message}`);
       }
@@ -652,13 +688,18 @@ export function register(api, { runner = "cucumber", client, identityHeader = "x
     }
   };
   if (quick) {
-    api.Before(async (world) => begin(world));
-    api.After(async (world) => end(world));
+    api.BeforeAll(async () => { await session(); });
+    api.Before(async (world) => {
+      if (await begin(world, () => fromQuickpickle(world)) === "skipped") world.context.skip();
+    });
+    api.After(async (world) => end(world, (world.info.errors?.length ?? 0) > 0));
   } else {
-    api.Before(function () { begin(this); });
-    api.After(async function () { await end(this); });
+    api.BeforeAll(async function () { await session(); });
+    api.Before(async function (testCase) { return begin(this, async () => fromPickle(testCase.pickle, testCase.gherkinDocument)); });
+    api.After(async function (testCase) { await end(this, testCase.result?.status === "FAILED"); });
   }
-  for (const [kind, expression, step] of STEPS) {
+  const steps = [...STEPS, ...customers.flatMap((c) => c.steps ?? [])];
+  for (const [kind, expression, step] of steps) {
     if (quick) api[kind](expression, async (world, ...args) => step(world.pubtest, ...args));
     else api[kind](expression, WRAPPERS[arity(expression)](step));
   }

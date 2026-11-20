@@ -92,6 +92,8 @@ class Context(SimpleNamespace):
     directory: Path | None = None
     secrets: list[str] = field(default_factory=list)
     written: dict[str, bytes] | None = None
+    # The record/replay harness's tape for the scenario (pubtest.cassettes), when it is on.
+    tape: Any = None
     _cleanups: list[Callable[[], Any]] = field(default_factory=list)
 
     @property

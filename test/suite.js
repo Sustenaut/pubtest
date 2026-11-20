@@ -4,10 +4,49 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { produced } from "../js/index.js";
+import { Caller } from "@sustenaut/integrations/caller.js";
+import { callerOptions } from "../js/cassettes.js";
+import { produced, Result } from "../js/index.js";
 import { STEPS } from "../js/steps.js";
 
-process.env.GREET_BIN_DIR ??= path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "tests", "bin");
+const here = path.dirname(fileURLToPath(import.meta.url));
+const repo = path.resolve(here, "..");
+process.env.GREET_BIN_DIR ??= path.join(here, "..", "tests", "bin");
+process.env.PUBTEST_BIN_DIR ??= path.join(here, "bin");
+
+// What record mode records through in pubtest's own suite: GitHub's shape of answer,
+// {"name": the URL's last part, "updated_at": now}, never the network.
+export const network = {
+  fetch: async (url) => new Response(JSON.stringify({ name: String(url).replace(/\/+$/, "").split("/").pop(), updated_at: new Date().toISOString().replace(/\.\d+Z$/, "Z") }),
+    { status: 200, headers: { "content-type": "application/json" } }),
+};
+
+function exampleGet(ctx, url) {
+  return ctx.attempt(async () => (await new Caller("pubtest", "suite", callerOptions(ctx)).call("github.repo-ops", "call", { method: "GET", url })).json());
+}
+
+// The inner suite of recording.feature, for cucumber-js: its support code, its
+// program, and its node_modules (pubtest's own, linked).
+const INNER_STEPS = `import * as cucumber from "@cucumber/cucumber";
+import { Caller } from "@sustenaut/integrations/caller.js";
+import { callerOptions } from ${JSON.stringify(path.join(repo, "js", "cassettes.js"))};
+import { register } from ${JSON.stringify(path.join(repo, "js", "index.js"))};
+
+process.env.PATH = \`\${new URL("../bin", import.meta.url).pathname}:\${process.env.PATH}\`;
+const network = {
+  fetch: async (url) => new Response(JSON.stringify({ name: String(url).split("/").pop(), updated_at: new Date().toISOString().replace(/\\.\\d+Z$/, "Z") }),
+    { status: 200, headers: { "content-type": "application/json" } }),
+};
+register(cucumber, { network });
+cucumber.When("the inner client gets {string}", function (url) {
+  return this.attempt(async () => (await new Caller("inner", "suite", callerOptions(this.pubtest)).call("github.repo-ops", "call", { method: "GET", url })).json());
+});
+`;
+const INNER_CLIENT = `import { Caller } from "@sustenaut/integrations/caller.js";
+const answer = await new Caller("inner", "program").call("github.repo-ops", "call", { method: "GET", url: process.argv[2] });
+console.log(JSON.stringify(answer.json()));
+`;
+const HARNESS = ["PUBTEST_RUN", "INTEGRATIONS_MODE", "INTEGRATIONS_CASSETTE", "INTEGRATIONS_CASSETTES", "INTEGRATIONS_CASSETTE_REPORT", "PUBTEST_ONLY", "PUBTEST_PLAN", "PUBTEST_RECORD", "PUBTEST_CASSETTES"];
 
 // The service under test in http.feature.
 export async function app(request) {
@@ -37,6 +76,44 @@ export async function app(request) {
 
 /** Define the suite's steps with `define(kind, expression, fn)`, fn called with the World as this. */
 export function suite(define) {
+
+  define("When", "the example client gets {string}", function (url) { return exampleGet(this.pubtest, url); });
+  define("When", "the example client gets the repository {string}", async function (logical) {
+    const real = (await this.pubtest.tape.namesOf("pubtest.example"))[logical];
+    return exampleGet(this.pubtest, `https://api.github.com/repos/pubtest-example/${real}`);
+  });
+
+  define("Given", "an inner suite with the feature {string}:", function (name, doc) { innerSuite(this.pubtest, name, doc, INNER_STEPS); });
+  define("Given", "an inner suite on the real network with the feature {string}:", function (name, doc) {
+    innerSuite(this.pubtest, name, doc, INNER_STEPS.replace("register(cucumber, { network });", "register(cucumber);"));
+  });
+  function innerSuite(ctx, name, doc, steps) {
+    const root = ctx.directory;
+    const write = (p, text, mode) => {
+      fs.mkdirSync(path.dirname(path.join(root, p)), { recursive: true });
+      fs.writeFileSync(path.join(root, p), text);
+      if (mode) fs.chmodSync(path.join(root, p), mode);
+    };
+    write(`features/${name}`, `${doc}\n`);
+    write("package.json", JSON.stringify({ type: "module", devDependencies: { "@sustenaut/integrations": "github:Sustenaut/integrations#v0.16.0" } }));
+    write("cucumber.json", JSON.stringify({ default: { paths: ["features/*.feature"], import: ["support/steps.mjs"] } }));
+    write("support/steps.mjs", steps);
+    write("bin/inner-client.mjs", INNER_CLIENT);
+    write("bin/inner-client", `#!/bin/sh\nexec node "$(dirname "$0")/inner-client.mjs" "$@"\n`, 0o755);
+    if (!fs.existsSync(path.join(root, "node_modules"))) fs.symlinkSync(path.join(repo, "node_modules"), path.join(root, "node_modules"));
+  }
+  define("When", "the inner suite runs", function () {
+    const env = { ...process.env };
+    for (const key of HARNESS) delete env[key];
+    const bin = path.join(repo, "node_modules", "@cucumber", "cucumber", "bin", "cucumber.js");
+    this.pubtest.acting();
+    const done = spawnSync(process.execPath, [bin], { cwd: this.pubtest.directory, env, encoding: "utf8", timeout: 300_000 });
+    this.pubtest.ran(new Result({ code: done.status ?? 1, stdout: done.stdout, stderr: done.stderr, argv: ["cucumber-js"] }));
+  });
+  define("Then", "the inner run says {string}", function (text) {
+    const said = this.pubtest.outcome.stdout + this.pubtest.outcome.stderr;
+    if (!said.includes(text)) throw new Error(said);
+  });
 
   define("When", "I add {int} and {int}", function (a, b) { return this.attempt(() => a + b); });
   define("When", "I check that {int} is more than {int}", function (a, b) { return this.attempt(() => a > b); });
