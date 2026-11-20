@@ -6,7 +6,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { binVar, Context, deepEqual, dig, filesIn, includes, isEmpty, matches, repository, Result, same, show, split, yamlDocuments } from "./core.js";
-import { fromPickle, fromQuickpickle, matchesName, NEVER, selected, settings, startSession, supportHash, Tape, textHash, transports } from "./cassettes.js";
+import { fromPickle, fromQuickpickle, matchesName, NEVER, selected, settings, standInOnly, startSession, supportHash, Tape, textHash, transports } from "./cassettes.js";
 
 const BASIC = ["sh", "bash", "env", "cat", "echo", "printf", "mkdir", "rm", "cp", "mv", "chmod", "ls", "sed",
   "grep", "head", "tail", "tr", "cut", "sort", "uniq", "wc", "dirname", "basename", "mktemp", "date",
@@ -531,16 +531,6 @@ export const STEPS = [
   ["Given", "the {string} service answers {string} with {int} and:", async (ctx, n, r, s, doc) => (await fake(ctx, n)).answer(r, s, String(doc))],
   ["Given", "the {string} service answers {string} with {int} and the header {string} set to {string}", async (ctx, n, r, s, h, v) => (await fake(ctx, n)).answer(r, s, "", { [h]: v })],
   ["Given", "the {string} service answers {string} with {int}, the header {string} set to {string}, and:", async (ctx, n, r, s, h, v, doc) => (await fake(ctx, n)).answer(r, s, String(doc), { [h]: v })],
-  ["Given", "the answers recorded in {string}", async (ctx, dir) => {
-    let base = path.join(ctx.directory ?? process.cwd(), dir);
-    if (!fs.existsSync(base)) base = dir;
-    for (const file of fs.readdirSync(base).filter((f) => f.endsWith(".json")).sort()) {
-      const e = JSON.parse(fs.readFileSync(path.join(base, file), "utf8"));
-      const body = typeof e.body === "string" ? e.body : JSON.stringify(e.body ?? "");
-      (await fake(ctx, e.service)).answer(`${e.method} ${e.path}`, e.status, body);
-      ctx.recorded.push(e);
-    }
-  }],
   ["Then", "the {string} service was asked {string}", (ctx, n, r) => { const a = asked(ctx, n).map((q) => `${q.method} ${q.path}`); check(a.includes(r) || a.map((x) => x.split("?")[0]).includes(r), `${n} was asked ${show(a)}`); }],
   ["Then", "the {string} service was asked {string} {int} times", (ctx, n, r, k) => { const got = requests(ctx, n, r).length; check(got === k, `${n} was asked ${r} ${got} times`); }],
   ["Then", "the {string} service was asked {string} with the header {string} set to {string}", (ctx, n, r, h, v) => {
@@ -566,11 +556,6 @@ export const STEPS = [
   }],
   ["Then", "the {string} service was asked nothing", (ctx, n) => check(asked(ctx, n).length === 0, `${n} was asked ${show(asked(ctx, n))}`)],
   ["Then", "nothing was sent", (ctx) => { const sent = Object.values(ctx.fakes).filter((f) => f.requests.length); check(sent.length === 0, `sent: ${sent.map((f) => f.name)}`); }],
-  ["Then", "every recorded answer was used", (ctx) => {
-    const used = new Set(Object.values(ctx.fakes).flatMap((f) => f.requests.map((r) => `${r.method} ${r.path}`)));
-    const unused = ctx.recorded.map((e) => `${e.method} ${e.path}`).filter((r) => !used.has(r));
-    check(unused.length === 0, `not used: ${unused}`);
-  }],
 
   // Calls to outside services: NAME is a plugin's id, or a prefix ("github" is every github.* plugin)
   ["Given", "the {string} integration can't be reached", (ctx, n) => tape(ctx).fault(n, "no-answer")],
@@ -665,6 +650,8 @@ export function register(api, { runner = "cucumber", client, identityHeader = "x
     if (found === null) {
       found = await settings(root);
       startSession(found);
+      const warning = standInOnly(found, network === undefined);
+      if (warning) console.error(warning);
     }
     return found;
   };

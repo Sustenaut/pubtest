@@ -10,12 +10,13 @@
 // @sustenaut/integrations is an optional peer: loaded with import(), and everything
 // here is inert unless it loads and the repository turns cassettes on ("pubtest":
 // {"cassettes": ...} in pubrules.json, or PUBTEST_CASSETTES=1).
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomInt, randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { byCodeUnit, onPath } from "./core.js";
 
 export const RECORD = "PUBTEST_RECORD";
 export const SWITCH = "PUBTEST_CASSETTES";
@@ -101,13 +102,14 @@ export async function settings(root, env = process.env) {
   let cassettes;
   let dataRepo = null;
   const named = declared(root);
+  const own = !env[CASSETTES] && typeof named === "string";
   if (env[CASSETTES]) cassettes = path.resolve(env[CASSETTES]);
-  else if (typeof named === "string") cassettes = path.resolve(root, named);
+  else if (own) cassettes = path.resolve(root, named);
   else {
     dataRepo = path.join(path.dirname(root), `${path.basename(root)}-data`);
     cassettes = path.join(dataRepo, "integrations", "cassettes");
   }
-  return { active, mode: truthy(env[RECORD]) ? "record" : "replay", root, cassettes, dataRepo, get recording() { return this.mode === "record"; } };
+  return { active, mode: truthy(env[RECORD]) ? "record" : "replay", root, cassettes, dataRepo, named: own, get recording() { return this.mode === "record"; } };
 }
 
 /** At the session's start: refuse a replay with no cassettes at all, make the directory a
@@ -121,6 +123,14 @@ export function startSession(found) {
   process.env[RUN] ??= randomUUID().replaceAll("-", "");
   process.env[MODE] = found.mode;
   process.env[CASSETTES] = fs.realpathSync(found.cassettes);
+}
+
+/** The warning a recording gives when it records the real network into pubrules.json's
+ * "DIR": that form is for a suite whose record transport is a stand-in (pubtest's own),
+ * since the repository is no place for what real services answered. */
+export function standInOnly(found, realNetwork) {
+  if (!(found.active && found.recording && found.named && realNetwork)) return null;
+  return `pubtest record: warning: ${found.cassettes} is pubrules.json's "cassettes": "DIR", which is only for a suite whose record transport is a stand-in; this one records the real network, whose answers belong in the private data repository ("pubtest": {"cassettes": true})`;
 }
 
 export function only() {
@@ -159,7 +169,9 @@ function sha256(text) {
 }
 
 function git(root, ...args) {
-  const done = spawnSync("git", args, { cwd: root, encoding: "utf8", timeout: 30_000 });
+  const bin = onPath("git");
+  if (bin === null) return "";
+  const done = spawnSync(bin, args, { cwd: root, encoding: "utf8", timeout: 30_000 });
   return done.status === 0 ? done.stdout.trim() : "";
 }
 
@@ -194,7 +206,7 @@ export function supportHash(root) {
     }
   };
   for (const dir of ["features", "test", "tests"]) walk(path.join(root, dir));
-  return sha256(files.sort().map((f) => `${path.relative(root, f)}\n${fs.readFileSync(f, "utf8")}`).join("\n"));
+  return sha256(files.sort(byCodeUnit).map((f) => `${path.relative(root, f)}\n${fs.readFileSync(f, "utf8")}`).join("\n"));
 }
 
 /** The scenario's clock (milliseconds, as a Caller's), sleep (seconds) and jitter. In
@@ -212,7 +224,8 @@ export class Clock {
     this.advance = (seconds) => {
       this.offset += seconds;
     };
-    this.random = () => (this.fake ? 0.5 : Math.random());
+    // A Caller's jitter: from node:crypto, like every random value here.
+    this.random = () => (this.fake ? 0.5 : randomInt(2 ** 32) / 2 ** 32);
   }
 }
 
@@ -374,15 +387,11 @@ export class Tape {
     if (this.borrowed !== null || this.failed || !fs.existsSync(this.path)) return problems;
     const cassette = this.cassette ?? new this.t.Cassette(this.path, { mode: "replay" });
     const used = new Set(cassette.calls.flatMap((c, i) => (c.used ? [i] : [])));
-    const mine = fs.realpathSync(this.path);
+    // A program names the cassette it replayed as begin() gave it, in
+    // INTEGRATIONS_CASSETTE: compared as text, a path read from its report is
+    // never looked up on disk.
     for (const child of children) {
-      let theirs = null;
-      try {
-        theirs = fs.realpathSync(child.cassette ?? "");
-      } catch {
-        // a cassette that is not there is not this one
-      }
-      if (theirs === mine) for (const i of child.used ?? []) used.add(i);
+      if (child.cassette === this.path) for (const i of child.used ?? []) used.add(i);
     }
     const left = cassette.calls.flatMap((c, i) => (used.has(i) ? [] : [c]));
     if (left.length) {

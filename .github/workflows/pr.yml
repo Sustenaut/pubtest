@@ -50,7 +50,7 @@ jobs:
     needs: [tested, functional]
     if: ${{ github.event_name != 'merge_group' && needs.tested.outputs.tested != 'true' }}
     uses: Sustenaut/pubrules/.github/workflows/job-sonar.yml@c847823ea0256b08a3811264e43571277c7aac7a # v0.46.0
-    with: {"sonar-args": "-Dsonar.javascript.lcov.reportPaths=coverage-download/lcov.info -Dsonar.coverage.exclusions=test/**,tests/**", "reports": "sonar.python.coverage.reportPaths=*.xml", "layout": "-Dsonar.sources=src -Dsonar.tests=tests"}
+    with: {"sonar-args": "-Dsonar.javascript.lcov.reportPaths=../../_temp/coverage-download/lcov.info -Dsonar.coverage.exclusions=test/**,tests/**", "reports": "sonar.python.coverage.reportPaths=*.xml", "layout": "-Dsonar.sources=src -Dsonar.tests=tests"}
     secrets: { SONAR_TOKEN: '${{ secrets.SONAR_TOKEN }}' }
 
   # The one check a ruleset requires: it passes only when every job

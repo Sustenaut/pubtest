@@ -83,8 +83,12 @@ export function suite(define) {
     return exampleGet(this.pubtest, `https://api.github.com/repos/pubtest-example/${real}`);
   });
 
-  define("Given", "an inner suite with the feature {string}:", function (name, doc) {
-    const root = this.pubtest.directory;
+  define("Given", "an inner suite with the feature {string}:", function (name, doc) { innerSuite(this.pubtest, name, doc, INNER_STEPS); });
+  define("Given", "an inner suite on the real network with the feature {string}:", function (name, doc) {
+    innerSuite(this.pubtest, name, doc, INNER_STEPS.replace("register(cucumber, { network });", "register(cucumber);"));
+  });
+  function innerSuite(ctx, name, doc, steps) {
+    const root = ctx.directory;
     const write = (p, text, mode) => {
       fs.mkdirSync(path.dirname(path.join(root, p)), { recursive: true });
       fs.writeFileSync(path.join(root, p), text);
@@ -93,11 +97,11 @@ export function suite(define) {
     write(`features/${name}`, `${doc}\n`);
     write("package.json", JSON.stringify({ type: "module", devDependencies: { "@sustenaut/integrations": "github:Sustenaut/integrations#v0.16.0" } }));
     write("cucumber.json", JSON.stringify({ default: { paths: ["features/*.feature"], import: ["support/steps.mjs"] } }));
-    write("support/steps.mjs", INNER_STEPS);
+    write("support/steps.mjs", steps);
     write("bin/inner-client.mjs", INNER_CLIENT);
     write("bin/inner-client", `#!/bin/sh\nexec node "$(dirname "$0")/inner-client.mjs" "$@"\n`, 0o755);
     if (!fs.existsSync(path.join(root, "node_modules"))) fs.symlinkSync(path.join(repo, "node_modules"), path.join(root, "node_modules"));
-  });
+  }
   define("When", "the inner suite runs", function () {
     const env = { ...process.env };
     for (const key of HARNESS) delete env[key];

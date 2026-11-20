@@ -20,8 +20,10 @@ A suite's own step with the same text takes precedence over these.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import subprocess
+import sys
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
@@ -220,6 +222,18 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
 def pytest_bdd_apply_tag(tag: str, function: Any) -> Any:
     """@cassette:PATH says which cassette a scenario replays: not a marker."""
     return function if tag.startswith("cassette:") else None
+
+
+def pytest_collection_finish(session: pytest.Session) -> None:
+    """Once the suite's modules are imported, and with them its record transport,
+    if it has its own: a recording through the real network into pubrules.json's
+    "DIR" says that the form is not for it."""
+    found = session.config.stash.get(_SETTINGS, None)
+    warning = found and cassettes.stand_in_only(found, real_network=cassettes.network is None)
+    if warning:
+        capture = session.config.pluginmanager.get_plugin("capturemanager")
+        with capture.global_and_fixture_disabled() if capture else contextlib.nullcontext():
+            print(warning, file=sys.stderr, flush=True)
 
 
 def pytest_bdd_before_scenario(request: pytest.FixtureRequest, feature: Any, scenario: Any) -> None:

@@ -36,7 +36,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "test": "c8 --reporter=lcovonly --reporter=text-summary --report-dir=coverage --temp-directory=node_modules/.c8 --include=js cucumber-js && vitest run"
+    "test": "c8 --reporter=lcovonly --reporter=text-summary --report-dir=coverage --temp-directory=node_modules/.c8 --include=js --include=src/pubtest/_child cucumber-js && vitest run"
   },
   "peerDependencies": {
     "@sustenaut/integrations": "github:Sustenaut/integrations#v0.16.0"

@@ -35,7 +35,12 @@ where = ["src"]
 pubtest = ["_child/*.py", "_child/*.mjs"]
 
 [tool.coverage.run]
-source = ["pubtest"]
+# The package, not a directory named pubtest: a scenario's scratch directory
+# has one (its stand-ins), which coverage would otherwise measure too.
+source_pkgs = ["pubtest"]
+# src/pubtest/_child, which `make functional` names: what a program a scenario
+# runs loads as sitecustomize, outside the package's module names.
+source_dirs = ["${PUBTEST_CHILD_DIR}"]
 patch = ["subprocess"]
 parallel = true
 

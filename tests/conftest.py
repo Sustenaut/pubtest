@@ -297,13 +297,22 @@ HARNESS = ("PUBTEST_RUN", "INTEGRATIONS_MODE", "INTEGRATIONS_CASSETTE", "INTEGRA
 
 @given(phrase('an inner suite with the feature "{name}":'))
 def inner_suite(ctx, name, docstring):
+    _inner_suite(ctx, name, docstring, INNER_SUITE)
+
+
+@given(phrase('an inner suite on the real network with the feature "{name}":'))
+def inner_suite_real(ctx, name, docstring):
+    _inner_suite(ctx, name, docstring, INNER_SUITE.replace("cassettes.network = Network\n", ""))
+
+
+def _inner_suite(ctx, name, docstring, suite):
     root = ctx.directory
     (root / "features").mkdir(exist_ok=True)
     (root / "features" / name).write_text(docstring + "\n", encoding="utf-8")
     (root / "tests").mkdir(exist_ok=True)
     (root / "tests" / "pytest.ini").write_text(
         "[pytest]\nbdd_features_base_dir = ../features/\naddopts = -p no:pubrules -p no:cacheprovider\n", encoding="utf-8")
-    (root / "tests" / "test_inner.py").write_text(INNER_SUITE, encoding="utf-8")
+    (root / "tests" / "test_inner.py").write_text(suite, encoding="utf-8")
     (root / "bin").mkdir(exist_ok=True)
     client = root / "bin" / "inner-client"
     client.write_text(INNER_CLIENT.replace("{python}", sys.executable), encoding="utf-8")

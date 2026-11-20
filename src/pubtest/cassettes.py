@@ -144,6 +144,8 @@ class Settings:
     root: Path
     cassettes: Path | None
     data_repo: Path | None
+    # The cassettes directory is pubrules.json's "DIR", in the repository itself.
+    named: bool = False
 
     @property
     def recording(self) -> bool:
@@ -165,14 +167,29 @@ def settings(root: Path | None = None, env: dict[str, str] | None = None) -> Set
     wanted = switch if switch is not None else bool(declared)
     active = bool(wanted) and transports() is not None
     data_repo = None
+    named = False
     if env.get(CASSETTES):
         cassettes = Path(env[CASSETTES]).absolute()
     elif isinstance(declared, str):
         cassettes = (root / declared).absolute()
+        named = True
     else:
         data_repo = root.parent / f"{root.name}-data"
         cassettes = data_repo / "integrations" / "cassettes"
-    return Settings(active, "record" if _truthy(env.get(RECORD)) else "replay", root, cassettes, data_repo)
+    return Settings(active, "record" if _truthy(env.get(RECORD)) else "replay", root, cassettes, data_repo,
+                    named)
+
+
+def stand_in_only(found: Settings, real_network: bool) -> str | None:
+    """The warning a recording gives when it records the real network into
+    pubrules.json's "DIR": that form is for a suite whose record transport is a
+    stand-in (pubtest's own), since the repository is no place for what real
+    services answered."""
+    if not (found.active and found.recording and found.named and real_network):
+        return None
+    return (f'pubtest record: warning: {found.cassettes} is pubrules.json\'s "cassettes": "DIR", which is only '
+            "for a suite whose record transport is a stand-in; this one records the real network, whose answers "
+            'belong in the private data repository ("pubtest": {"cassettes": true})')
 
 
 def start_session(found: Settings) -> None:
@@ -478,8 +495,12 @@ class Tape:
             return problems
         cassette = self.cassette or self.t.Cassette(self.path, mode="replay")
         used = {i for i, call in enumerate(cassette.calls) if call.used}
+        # A program names the cassette it replayed as begin() gave it, in
+        # INTEGRATIONS_CASSETTE: compared as text, a path read from its report
+        # is never looked up on disk.
+        mine = str(self.path)
         for child in children:
-            if Path(child.get("cassette") or "").resolve() == self.path.resolve():
+            if child.get("cassette") == mine:
                 used.update(child.get("used", []))
         left = [i for i in range(len(cassette.calls)) if i not in used]
         if left:

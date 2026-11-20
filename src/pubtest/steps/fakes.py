@@ -1,11 +1,10 @@
-"""HTTP: fake services the code under test calls, and recorded answers."""
+"""HTTP: fake services the code under test calls."""
 
 from __future__ import annotations
 
 import json
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
 
 from pytest_bdd import given, then
 
@@ -100,22 +99,6 @@ def answers_with_header_and(pubtest_ctx, monkeypatch, name, request, status, hea
     fake(pubtest_ctx, monkeypatch, name).answer(request, status, docstring, {header: value})
 
 
-@given(phrase('the answers recorded in "{directory}"'))
-def recorded(pubtest_ctx, monkeypatch, directory):
-    """Each JSON file in the directory, in name order, is one answer:
-    {"service", "method", "path", "status", "body"}."""
-    base = (pubtest_ctx.directory or Path.cwd()) / directory
-    if not base.exists():
-        base = Path(directory)
-    pubtest_ctx.recorded = []
-    for path in sorted(base.glob("*.json")):
-        entry = json.loads(path.read_text(encoding="utf-8"))
-        body = entry.get("body", "")
-        body = body if isinstance(body, str) else json.dumps(body)
-        fake(pubtest_ctx, monkeypatch, entry["service"]).answer(f"{entry['method']} {entry['path']}", entry["status"], body)
-        pubtest_ctx.recorded.append(entry)
-
-
 def _asked(pubtest_ctx, name: str) -> list[dict]:
     fakes = getattr(pubtest_ctx, "fakes", {})
     assert name in fakes, f"there is no fake {name} service"
@@ -191,11 +174,3 @@ def asked_nothing(pubtest_ctx, name):
 def nothing_sent(pubtest_ctx):
     sent = {name: f.requests for name, f in getattr(pubtest_ctx, "fakes", {}).items() if f.requests}
     assert not sent, f"sent: {sent}"
-
-
-@then("every recorded answer was used")
-def recorded_used(pubtest_ctx):
-    used = {f"{r['method']} {r['path']}" for f in getattr(pubtest_ctx, "fakes", {}).values() for r in f.requests}
-    unused = [f"{e['method']} {e['path']}" for e in getattr(pubtest_ctx, "recorded", [])
-              if f"{e['method']} {e['path']}" not in used]
-    assert not unused, f"not used: {unused}"

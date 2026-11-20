@@ -16,7 +16,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { CASSETTE, CASSETTES, MODE, NO_DATA_REPO, ONLY, parse, pathFor, PLAN, RECORD, REPORT, RUN, settings, SWITCH } from "./cassettes.js";
-import { repository } from "./core.js";
+import { byCodeUnit, onPath, repository } from "./core.js";
 
 const HARNESS = [RUN, MODE, CASSETTE, CASSETTES, REPORT, ONLY, PLAN, RECORD];
 const USAGE = `pubtest record [--all | --changed | SCENARIO...] [--rename OLD NEW] [--create-data-repo]
@@ -54,7 +54,7 @@ export function runner(root, lang) {
   if (lang === "python") {
     const here = fs.existsSync(path.join(root, "tests", "pytest.ini")) ? path.join(root, "tests") : root;
     const venv = path.join(root, ".venv", "bin", "python");
-    return [[fs.existsSync(venv) ? venv : "python3", "-m", "pytest", "-q", "-p", "no:cacheprovider"], here];
+    return [[fs.existsSync(venv) ? venv : onPath("python3"), "-m", "pytest", "-q", "-p", "no:cacheprovider"], here];
   }
   for (const from of [path.join(root, "noop.js"), import.meta.url]) {
     try {
@@ -64,11 +64,13 @@ export function runner(root, lang) {
       // not installed there
     }
   }
-  return [["npx", "cucumber-js"], root];
+  return [[onPath("npx"), "cucumber-js"], root];
 }
 
 function gitOut(root, ...args) {
-  const done = spawnSync("git", args, { cwd: root, encoding: "utf8" });
+  const git = onPath("git");
+  if (git === null) return "";
+  const done = spawnSync(git, args, { cwd: root, encoding: "utf8" });
   return done.status === 0 ? done.stdout.trim() : "";
 }
 
@@ -92,7 +94,9 @@ function dataRepo(found, create) {
     console.error(`no data repo at ${found.dataRepo}. Create it, private and beside this repository, with:\n\n  (cd ${path.dirname(found.root)} && ${command.map(quote).join(" ")})\n\nor run pubtest record again with --create-data-repo, which runs that and commits its README, pubrules.json and integrations.json.`);
     return 1;
   }
-  const done = spawnSync(command[0], command.slice(1), { cwd: path.dirname(found.root), stdio: "inherit" });
+  const gh = onPath("gh");
+  if (gh === null) return fail("gh repo create needs gh, which is not on PATH", 1);
+  const done = spawnSync(gh, command.slice(1), { cwd: path.dirname(found.root), stdio: "inherit" });
   if (done.status !== 0 || !fs.existsSync(found.dataRepo)) return fail("gh repo create failed", done.status || 1);
   const repo = found.dataRepo;
   const of = path.basename(found.root);
@@ -101,8 +105,10 @@ function dataRepo(found, create) {
   fs.writeFileSync(path.join(repo, "integrations.json"), `${JSON.stringify({ uses: [], exclude: [{ path: "**", reason: "Recorded answers, not code" }] }, null, 2)}\n`);
   fs.mkdirSync(found.cassettes, { recursive: true });
   fs.writeFileSync(path.join(found.cassettes, ".gitkeep"), "");
+  const git = onPath("git");
+  if (git === null) return fail("git is not on PATH", 1);
   for (const args of [["add", "-A"], ["commit", "-q", "-m", "Start the data repository"], ["push", "-q", "-u", "origin", "HEAD"]]) {
-    if (spawnSync("git", args, { cwd: repo, stdio: "inherit" }).status !== 0) return fail(`git ${args.join(" ")} failed in ${repo}`, 1);
+    if (spawnSync(git, args, { cwd: repo, stdio: "inherit" }).status !== 0) return fail(`git ${args.join(" ")} failed in ${repo}`, 1);
   }
   return 0;
 }
@@ -118,7 +124,7 @@ function find(found, selector) {
     // a title: look among the recorded ones
   }
   const hits = [];
-  for (const file of fs.existsSync(found.cassettes) ? walk(found.cassettes).sort() : []) {
+  for (const file of fs.existsSync(found.cassettes) ? walk(found.cassettes).sort(byCodeUnit) : []) {
     try {
       const scenario = parse(JSON.parse(fs.readFileSync(file, "utf8")).scenario ?? "");
       if (scenario.namedBy(selector)) hits.push(scenario);
@@ -205,6 +211,7 @@ export async function record(argv) {
   const made = dataRepo(found, args.create);
   if (made) return made;
   const [command, where] = runner(root, language(root));
+  if (command[0] === null) return fail(`the suite runs with ${language(root) === "python" ? "python3" : "npx"}, which is not on PATH`, 1);
   let chosen = args.all ? null : args.scenarios;
   if (args.changed) {
     chosen = changed(command, where);

@@ -78,6 +78,7 @@ Feature: Recording cassettes, and what replay refuses
     When I run "pubtest record --all"
     Then it succeeds
     And it prints "recorded demo/gets-a-repository.json"
+    And stderr does not mention "record transport is a stand-in"
     And the JSON in "cassettes/demo/gets-a-repository.json" has "scenario" equal to "demo.feature: Gets a repository"
     And the JSON in "cassettes/demo/gets-a-repository.json" has "current.calls.0.plugin" equal to "github.repo-ops"
     And the JSON in "cassettes/demo/gets-a-repository.json" has "current.recorded.integrations" equal to "0.16.0"
@@ -207,3 +208,54 @@ Feature: Recording cassettes, and what replay refuses
     Then it succeeds
     And the file "cassettes/demo/gets-a-repository.json" does not exist
     And the JSON in "cassettes/demo/fetches-a-repository.json" has "scenario" equal to "demo.feature: Fetches a repository"
+
+  Scenario: --rename finds a recorded scenario by its title alone
+    Given a file "pubrules.json" holding:
+      """
+      {"pubtest": {"cassettes": "cassettes"}}
+      """
+    And an inner suite with the feature "demo.feature":
+      """
+      Feature: Demo
+        Scenario: Gets a repository
+          When the inner client gets "https://api.github.com/repos/o/r"
+          Then the result's "name" is "r"
+      """
+    When I run "pubtest record --all"
+    And I run "pubtest record --rename \"Gets a repository\" \"Fetches a repository\""
+    Then it succeeds
+    And it prints "demo/gets-a-repository.json -> demo/fetches-a-repository.json"
+
+  Scenario: Recording the real network into a directory of the repository's own warns
+    Given a file "pubrules.json" holding:
+      """
+      {"pubtest": {"cassettes": "cassettes"}}
+      """
+    And an inner suite on the real network with the feature "demo.feature":
+      """
+      Feature: Demo
+        Scenario: Calls nothing
+          When I run "true"
+          Then it succeeds
+      """
+    When I run "pubtest record --all"
+    Then it succeeds
+    And stderr mentions "which is only for a suite whose record transport is a stand-in"
+
+  Scenario Outline: What pubtest record refuses
+    Given a file "pubrules.json" holding:
+      """
+      {"pubtest": {"cassettes": "cassettes"}}
+      """
+    When I run "pubtest <arguments>"
+    Then it fails
+    And stderr mentions "<message>"
+
+    Examples:
+      | arguments                                      | message                                          |
+      | record                                         | say which: --all, --changed, or the scenarios    |
+      | record --all 'demo.feature: Gets a repository' | --all and --changed take no scenarios            |
+      | record --rename 'demo.feature: A' B --all      | --rename moves one cassette, and records nothing |
+      | record --rename 'demo.feature: A' B            | demo.feature: A has no cassette                  |
+      | record --rename 'Gets a repository' B          | names 0 recorded scenarios                       |
+      | replay                                         | no command                                       |

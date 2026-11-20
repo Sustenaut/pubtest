@@ -263,16 +263,6 @@ to its end.
 | `Then the "NAME" service was asked nothing` | |
 | `Then nothing was sent` | no fake service was asked anything |
 
-### Recorded answers
-
-To be replaced by cassettes; goes when release-controlplane moves (step 2, PR 5).
-pub-site's site.feature and site-storage.feature read it too.
-
-| Step | Does or checks |
-| --- | --- |
-| `Given the answers recorded in "DIR"` | each JSON file in DIR, in name order, is one answer, `{"service", "method", "path", "status", "body"}`: the fake service it names (made if need be) answers that request with it |
-| `Then every recorded answer was used` | |
-
 ### Calls to outside services: faults and counts
 
 With the record/replay harness on ([Record and replay](#record-and-replay)),
@@ -341,7 +331,11 @@ the repository turns it on in pubrules.json:
 
 `true` keeps cassettes in the data repository, `../<repo>-data/` beside the
 repository, private, under `integrations/cassettes/`; a path, such as
-`"tests/cassettes"`, keeps them in the repository itself. `PUBTEST_CASSETTES=1`
+`"tests/cassettes"`, keeps them in the repository itself. That form is only for
+a suite whose record transport is a stand-in, as pubtest's own suite's is: what
+real services answered belongs in the private data repository, and a recording
+through the real network into a directory pubrules.json names warns that it
+does. `PUBTEST_CASSETTES=1`
 turns it on whatever pubrules.json says, and `0` off. Off, nothing here
 happens, and the steps above fail saying so.
 

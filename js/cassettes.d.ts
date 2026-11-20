@@ -41,11 +41,15 @@ export interface Settings {
   root: string;
   cassettes: string;
   dataRepo: string | null;
+  /** The cassettes directory is pubrules.json's "DIR", in the repository itself. */
+  named: boolean;
   readonly recording: boolean;
 }
 
 export function settings(root: string, env?: Record<string, string | undefined>): Promise<Settings>;
 export function startSession(found: Settings): void;
+/** The warning a recording through the real network into pubrules.json's "DIR" gives, or null. */
+export function standInOnly(found: Settings, realNetwork: boolean): string | null;
 export function pathFor(scenario: Scenario, found: Settings): string;
 /** NAME is a plugin's id, or what every id it stands for starts with, before a dot. */
 export function matchesName(name: string, plugin: string | null | undefined): boolean;
