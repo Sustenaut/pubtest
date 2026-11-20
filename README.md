@@ -86,7 +86,7 @@ what they answered: one cassette per scenario, recorded with
 "pubtest": {"cassettes": true}
 ```
 
-and install integrations beside pubtest: `pubtest[integrations]` in Python,
+and install integrations beside pubtest: the suite's own pin of it in Python,
 `@sustenaut/integrations` (an optional peer) in Node. pubtest itself never
 depends on integrations, whose own suite runs on pubtest. Then:
 

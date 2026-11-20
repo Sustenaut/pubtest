@@ -1,0 +1,4 @@
+{
+  "category": "changed",
+  "change": "pubtest's Python distribution is pubtestrules, its PyPI name (PyPI's pubtest is another project): the wheel is pubtestrules-X-py3-none-any.whl and is uploaded to PyPI as well as attached to the release; `import pubtest`, the pubtest command and the pytest plugin keep their names"
+}

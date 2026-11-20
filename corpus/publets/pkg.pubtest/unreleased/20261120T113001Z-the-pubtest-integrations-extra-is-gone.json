@@ -1,0 +1,4 @@
+{
+  "category": "removed",
+  "change": "the pubtest[integrations] extra: PyPI takes no dependency by URL, and the harness needs only integrations installed, which a recording suite pins itself"
+}
