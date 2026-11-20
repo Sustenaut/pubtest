@@ -2,7 +2,7 @@
   "claims": {
     "identity": {
       "class": "archival",
-      "content": "pubtest 0.3.0 is released as v0.3.0 from commit 127342c07c375c66ece0a75715c4ce8019a35547.",
+      "content": "pubtest 0.4.0 is released as v0.4.0 from commit e6d427d48189f2c6e58db9e3bdc35ba0bb0b4e57.",
       "data": {
         "columns": [
           {
@@ -27,25 +27,25 @@
         "rows": [
           [
             "pubtest",
-            "0.3.0",
+            "0.4.0",
             "",
             "",
-            "v0.3.0",
-            "127342c07c375c66ece0a75715c4ce8019a35547"
+            "v0.4.0",
+            "e6d427d48189f2c6e58db9e3bdc35ba0bb0b4e57"
           ]
         ]
       },
-      "scope": "the published release v0.3.0 of pubtest",
+      "scope": "the published release v0.4.0 of pubtest",
       "sources": [
         {
           "ref": "pubtest",
-          "revision": "127342c07c375c66ece0a75715c4ce8019a35547"
+          "revision": "e6d427d48189f2c6e58db9e3bdc35ba0bb0b4e57"
         }
       ]
     },
     "release": {
       "class": "archival",
-      "content": "pubtest 0.3.0 was released on 2026-11-20 from commit 127342c07c375c66ece0a75715c4ce8019a35547 with these changes.",
+      "content": "pubtest 0.4.0 was released on 2026-11-20 from commit e6d427d48189f2c6e58db9e3bdc35ba0bb0b4e57 with these changes.",
       "data": {
         "columns": [
           {
@@ -57,23 +57,23 @@
         ],
         "rows": [
           [
-            "added",
-            "Record and replay for calls through integrations' Caller: a cassette per scenario (pubtest.cassettes, @sustenaut/pubtest/cassettes), on when integrations is installed and pubrules.json sets \"pubtest\": {\"cassettes\": ...} (a \"DIR\" only for a suite whose record transport is a stand-in: recording the real network into one warns); programs a scenario runs replay from it and report the calls they used; the pubtest record command (--all, --changed, scenarios, --rename, --create-data-repo) in both packages; failure steps on integrations' Faulty (can't be reached, does not answer in time, answers \"M P\" with N and:, answers with N then as recorded, answers with what is not JSON), the cassette of \"SCENARIO\" and @cassette:, the Caller slept N seconds, \"NAME\" was called N times; test customers (pubtest.customers entry points, register(api, { customers })); the pubtest[integrations] extra and an optional @sustenaut/integrations peer"
+            "changed",
+            "pubtest's Python distribution is pubtestrules, its PyPI name (PyPI's pubtest is another project): the wheel is pubtestrules-X-py3-none-any.whl and is uploaded to PyPI as well as attached to the release; `import pubtest`, the pubtest command and the pytest plugin keep their names"
           ],
           [
             "removed",
-            "the answers recorded in DIR and every recorded answer was used are gone: record cassettes with pubtest record"
+            "the pubtest[integrations] extra: PyPI takes no dependency by URL, and the harness needs only integrations installed, which a recording suite pins itself"
           ]
         ]
       },
       "depends": [
         "#identity"
       ],
-      "scope": "the published release v0.3.0 of pubtest",
+      "scope": "the published release v0.4.0 of pubtest",
       "sources": [
         {
           "ref": "pubtest",
-          "revision": "127342c07c375c66ece0a75715c4ce8019a35547"
+          "revision": "e6d427d48189f2c6e58db9e3bdc35ba0bb0b4e57"
         }
       ]
     }
