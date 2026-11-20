@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pubtest"
-version = "0.2.2"
+version = "0.3.0"
 description = "The Gherkin steps every Sustenaut suite shares, as a pytest-bdd plugin (and, from the same grammar, an npm package)."
 readme = "README.md"
 license = "Apache-2.0"
