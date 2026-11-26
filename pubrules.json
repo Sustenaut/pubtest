@@ -8,7 +8,9 @@
       "coverage-report": "coverage/",
       "sonar-args": "-Dsonar.javascript.lcov.reportPaths=../../_temp/coverage-download/lcov.info -Dsonar.coverage.exclusions=test/**,tests/**"
     },
-    "release": {}
+    "release": {
+      "pubrel": "0.7.1"
+    }
   },
   "protect": {
     "checks": [
