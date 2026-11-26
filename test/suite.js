@@ -42,6 +42,40 @@ cucumber.When("the inner client gets {string}", function (url) {
   return this.attempt(async () => (await new Caller("inner", "suite", callerOptions(this.pubtest)).call("github.repo-ops", "call", { method: "GET", url })).json());
 });
 `;
+// The same suite with a test customer, inner.watched, whose cleanup, and the cleanup its
+// step gives the scenario, each write to cleanups.txt what they see: the mode, whether
+// INTEGRATIONS_CASSETTE is the one the scenario's step saw, and whether it failed. The
+// customer's cleanup makes a call, as integrations' GitHub customer's does, and its step
+// "the watched customer's cleanup fails" breaks it. After the scenarios, the file says
+// what INTEGRATIONS_CASSETTE is.
+const WATCHED = `import fs from "node:fs";
+const log = (line) => fs.appendFileSync(new URL("../cleanups.txt", import.meta.url), \`\${line}\\n\`);
+let seen = null;
+let breaks = false;
+const sees = (tape) => {
+  const cassette = process.env.INTEGRATIONS_CASSETTE === undefined ? "no cassette" : process.env.INTEGRATIONS_CASSETTE === seen ? "the scenario's cassette" : "another cassette";
+  return \`in \${process.env.INTEGRATIONS_MODE} mode, with \${cassette}, after it \${tape.failed ? "failed" : "passed"}\`;
+};
+const watched = {
+  name: "inner.watched",
+  setup: () => ({ "the repository": "watched-1" }),
+  async cleanup(tape, names) {
+    const answer = await new Caller("inner", "cleanup").call("github.repo-ops", "call", { method: "DELETE", url: \`https://api.github.com/repos/o/\${names["the repository"]}\` });
+    log(\`the customer's cleanup of \${answer.json().name}, \${sees(tape)}\`);
+    if (breaks) throw new Error("the watched cleanup broke");
+  },
+  steps: [
+    ["Given", "the watched customer's repository {string}", async (ctx, logical) => {
+      seen = process.env.INTEGRATIONS_CASSETTE;
+      breaks = false;
+      if (!(logical in await ctx.tape.namesOf("inner.watched"))) throw new Error(\`no \${logical}\`);
+      ctx.cleanup(() => log(\`the scenario's cleanup, \${sees(ctx.tape)}\`));
+    }],
+    ["Given", "the watched customer's cleanup fails", () => { breaks = true; }],
+  ],
+};
+cucumber.AfterAll(() => log(\`after the scenarios, INTEGRATIONS_CASSETTE is \${process.env.INTEGRATIONS_CASSETTE ?? "unset"}\`));
+`;
 const INNER_CLIENT = `import { Caller } from "@sustenaut/integrations/caller.js";
 const answer = await new Caller("inner", "program").call("github.repo-ops", "call", { method: "GET", url: process.argv[2] });
 console.log(JSON.stringify(answer.json()));
@@ -84,6 +118,9 @@ export function suite(define) {
   });
 
   define("Given", "an inner suite with the feature {string}:", function (name, doc) { innerSuite(this.pubtest, name, doc, INNER_STEPS); });
+  define("Given", "an inner suite with a watched test customer and the feature {string}:", function (name, doc) {
+    innerSuite(this.pubtest, name, doc, INNER_STEPS.replace("register(cucumber, { network });", `${WATCHED}register(cucumber, { network, customers: [watched] });`));
+  });
   define("Given", "an inner suite on the real network with the feature {string}:", function (name, doc) {
     innerSuite(this.pubtest, name, doc, INNER_STEPS.replace("register(cucumber, { network });", "register(cucumber);"));
   });

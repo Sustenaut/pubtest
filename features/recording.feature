@@ -242,6 +242,116 @@ Feature: Recording cassettes, and what replay refuses
     Then it succeeds
     And stderr mentions "which is only for a suite whose record transport is a stand-in"
 
+  Scenario: A test customer's cleanup runs after the cassette is saved, with the scenario's cassette still set
+    Given a file "pubrules.json" holding:
+      """
+      {"pubtest": {"cassettes": "cassettes"}}
+      """
+    And an inner suite with a watched test customer and the feature "demo.feature":
+      """
+      Feature: Demo
+        Scenario: Gets a repository
+          Given the watched customer's repository "the repository"
+          When the inner client gets "https://api.github.com/repos/o/r"
+          Then the result's "name" is "r"
+      """
+    When I run "pubtest record --all"
+    Then it succeeds
+    And the file "cleanups.txt" holds:
+      """
+      the scenario's cleanup, in record mode, with the scenario's cassette, after it passed
+      the customer's cleanup of watched-1, in record mode, with the scenario's cassette, after it passed
+      after the scenarios, INTEGRATIONS_CASSETTE is unset
+      """
+    And the file "cassettes/demo/gets-a-repository.json" includes "/repos/o/r"
+    And the file "cassettes/demo/gets-a-repository.json" does not include "/repos/o/watched-1"
+
+  Scenario: In replay the scenario's own cleanups see its cassette, and no customer's cleanup runs
+    Given a file "pubrules.json" holding:
+      """
+      {"pubtest": {"cassettes": "cassettes"}}
+      """
+    And an inner suite with a watched test customer and the feature "demo.feature":
+      """
+      Feature: Demo
+        Scenario: Gets a repository
+          Given the watched customer's repository "the repository"
+          When the inner client gets "https://api.github.com/repos/o/r"
+          Then the result's "name" is "r"
+      """
+    When I run "pubtest record --all"
+    And the inner suite runs
+    Then it succeeds
+    And the file "cleanups.txt" holds:
+      """
+      the scenario's cleanup, in record mode, with the scenario's cassette, after it passed
+      the customer's cleanup of watched-1, in record mode, with the scenario's cassette, after it passed
+      after the scenarios, INTEGRATIONS_CASSETTE is unset
+      the scenario's cleanup, in replay mode, with the scenario's cassette, after it passed
+      after the scenarios, INTEGRATIONS_CASSETTE is unset
+      """
+
+  Scenario: A failed scenario's cleanups run too, with its cassette set
+    Given a file "pubrules.json" holding:
+      """
+      {"pubtest": {"cassettes": "cassettes"}}
+      """
+    And an inner suite with a watched test customer and the feature "demo.feature":
+      """
+      Feature: Demo
+        Scenario: Gets a repository
+          Given the watched customer's repository "the repository"
+          When the inner client gets "https://api.github.com/repos/o/r"
+          Then the result's "name" is "s"
+      """
+    When I run "pubtest record --all"
+    Then it fails
+    And the file "cleanups.txt" holds:
+      """
+      the scenario's cleanup, in record mode, with the scenario's cassette, after it failed
+      the customer's cleanup of watched-1, in record mode, with the scenario's cassette, after it failed
+      after the scenarios, INTEGRATIONS_CASSETTE is unset
+      """
+    And the file "cassettes/demo/gets-a-repository.json" does not exist
+
+  Scenario: A test customer's failed cleanup fails a scenario that passed
+    Given a file "pubrules.json" holding:
+      """
+      {"pubtest": {"cassettes": "cassettes"}}
+      """
+    And an inner suite with a watched test customer and the feature "demo.feature":
+      """
+      Feature: Demo
+        Scenario: Gets a repository
+          Given the watched customer's repository "the repository"
+          And the watched customer's cleanup fails
+          When the inner client gets "https://api.github.com/repos/o/r"
+          Then the result's "name" is "r"
+      """
+    When I run "pubtest record --all"
+    Then it fails
+    And the inner run says "the test customer inner.watched's cleanup failed: the watched cleanup broke"
+    And the file "cleanups.txt" includes "after the scenarios, INTEGRATIONS_CASSETTE is unset"
+
+  Scenario: A failed cleanup does not hide the scenario's own failure
+    Given a file "pubrules.json" holding:
+      """
+      {"pubtest": {"cassettes": "cassettes"}}
+      """
+    And an inner suite with a watched test customer and the feature "demo.feature":
+      """
+      Feature: Demo
+        Scenario: Gets a repository
+          Given the watched customer's repository "the repository"
+          And the watched customer's cleanup fails
+          When the inner client gets "https://api.github.com/repos/o/r"
+          Then the result's "name" is "s"
+      """
+    When I run "pubtest record --all"
+    Then it fails
+    And the inner run says "the test customer inner.watched's cleanup failed: the watched cleanup broke"
+    And the inner run says "the result's name is \"r\", not s"
+
   Scenario Outline: What pubtest record refuses
     Given a file "pubrules.json" holding:
       """

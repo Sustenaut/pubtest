@@ -278,7 +278,10 @@ def pytest_bdd_after_scenario(request: pytest.FixtureRequest, feature: Any, scen
         return
     tape = held
     del request.node.stash[_TAPE]
-    problems = tape.end()
+    # The scenario's own cleanups run inside the tape's end, as its customers' do: after
+    # its cassette is saved, before the harness's environment is restored. The context's
+    # teardown then finds none left.
+    problems = tape.end(close=request.getfixturevalue("pubtest_ctx").close)
     if problems and tape.failed:  # the step's own failure says more; these only add to it
         import warnings  # noqa: PLC0415
         warnings.warn("\n".join(problems), stacklevel=1)
