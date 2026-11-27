@@ -6,7 +6,7 @@
       "setup": "make venv && npm ci --ignore-scripts",
       "test": "make functional && npm audit --package-lock-only && npm test && shellcheck scripts/*.sh",
       "coverage-report": "coverage/",
-      "sonar-args": "-Dsonar.javascript.lcov.reportPaths=../../_temp/coverage-download/lcov.info -Dsonar.coverage.exclusions=test/**,tests/**,src/pubtest/cassettes.py,src/pubtest/cli.py,src/pubtest/_child/**,src/pubtest/steps/integrations.py"
+      "sonar-args": "-Dsonar.javascript.lcov.reportPaths=../../_temp/coverage-download/lcov.info -Dsonar.coverage.exclusions=test/**,tests/**,src/pubtest/cassettes.py,src/pubtest/cli.py,src/pubtest/_child/**,src/pubtest/steps/integrations.py,js/cassettes.js,js/cli.js"
     },
     "release": {
       "pubrel": "0.7.1"

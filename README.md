@@ -110,7 +110,8 @@ branch in an integrations checkout (`pip install -e <pubtest>` and
 `npm test`, and say so in the change row. The nightly's integrations pull
 request proves it again once released.
 For the same reason pubtest's SonarQube coverage leaves out the harness's own
-modules (`cassettes.py`, `cli.py`, `_child/`, `steps/integrations.py`, in
+modules (`cassettes.py`, `cli.py`, `_child/`, `steps/integrations.py`, and
+for Node `js/cassettes.js` and `js/cli.js`, in
 pubrules.json's `sonar-args`): their coverage is integrations' suite's.
 
 ## Developing
