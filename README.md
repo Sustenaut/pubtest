@@ -99,6 +99,17 @@ and the failure steps (`Given the "github" integration can't be reached`)
 break a scenario's calls on purpose, over its cassette. GRAMMAR.md, "Record
 and replay", has the modes, variables, paths, errors and test customers.
 
+The harness's end-to-end scenarios (recording, replay, faults, test
+customers, under pytest-bdd and cucumber-js) run in integrations' suite,
+`tests/features/harness-*.feature`, because they need a real `Caller`, and
+pubtest's own tests may not depend on integrations. So a change to the
+harness (`cassettes.py`, `js/cassettes.js`, `_child/`, the integration
+steps, `pubtest record`) is proven there before it is released: install this
+branch in an integrations checkout (`pip install -e <pubtest>` and
+`npm install <pubtest>` in clients/js), run `make check` and clients/js'
+`npm test`, and say so in the change row. The nightly's integrations pull
+request proves it again once released.
+
 ## Developing
 
 ```sh
@@ -110,9 +121,8 @@ npm test             # the same features under cucumber-js, then quickpickle
 `features/` is the library's own suite, the steps a suite would write are in
 `tests/conftest.py` and `test/suite.js` (the same texts in both), and
 `tests/python-features/` holds the Python-only adapter scenarios. The suite
-turns cassettes on, kept in `tests/cassettes/`, and its example test customer
-is in `tests/customers/` and `test/customer.js`; `pubtest record --all`
-records them again, through a stand-in for the network. A change to
+runs without integrations, so the record/replay harness is off in it (see
+"Record and replay" for where its scenarios run). A change to
 a step changes GRAMMAR.md, both packages and a feature, in one pull request,
 and records itself with `pubrel add`. Releases are cut with `pubrel prepare`
 from a checkout whose `corpus/.publet` holds the release key.
