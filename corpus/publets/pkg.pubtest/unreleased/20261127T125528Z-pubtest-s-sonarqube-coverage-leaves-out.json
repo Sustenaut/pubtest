@@ -1,0 +1,4 @@
+{
+  "category": "internal",
+  "change": "pubtest's SonarQube coverage leaves out the record/replay harness's modules (cassettes.py, cli.py, _child/, steps/integrations.py), whose scenarios run in integrations' suite since the previous change"
+}

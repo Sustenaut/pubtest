@@ -53,7 +53,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
-    with: {"sonar-args": "-Dsonar.javascript.lcov.reportPaths=../../_temp/coverage-download/lcov.info -Dsonar.coverage.exclusions=test/**,tests/**", "reports": "sonar.python.coverage.reportPaths=*.xml sonar.javascript.lcov.reportPaths=lcov.info", "layout": "-Dsonar.sources=src -Dsonar.tests=tests"}
+    with: {"sonar-args": "-Dsonar.javascript.lcov.reportPaths=../../_temp/coverage-download/lcov.info -Dsonar.coverage.exclusions=test/**,tests/**,src/pubtest/cassettes.py,src/pubtest/cli.py,src/pubtest/_child/**,src/pubtest/steps/integrations.py", "reports": "sonar.python.coverage.reportPaths=*.xml sonar.javascript.lcov.reportPaths=lcov.info", "layout": "-Dsonar.sources=src -Dsonar.tests=tests"}
     secrets: { SONAR_TOKEN: '${{ secrets.SONAR_TOKEN }}' }
 
   # The one check a ruleset requires: it passes only when every job
