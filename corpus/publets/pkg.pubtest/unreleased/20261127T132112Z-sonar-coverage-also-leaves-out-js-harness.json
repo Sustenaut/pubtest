@@ -1,0 +1,4 @@
+{
+  "category": "internal",
+  "change": "pubtest's SonarQube coverage also leaves out the Node harness (js/cassettes.js, js/cli.js), whose scenarios run in integrations' suite like cassettes.py's and cli.py's"
+}
