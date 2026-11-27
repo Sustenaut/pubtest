@@ -71,7 +71,9 @@ export interface Customer {
   steps?: Array<[kind: "Given" | "When" | "Then", expression: string, run: (ctx: any, ...args: any[]) => unknown]>;
   /** Record mode only: the real names the scenario's logical ones stand for. */
   setup?(tape: Tape): Record<string, string> | Promise<Record<string, string>>;
-  /** Record mode only, when the scenario ends, passed or failed. */
+  /** Record mode only, when the scenario ends, passed or failed: after its cassette is saved and its own
+   * cleanups ran, with its INTEGRATIONS_* environment still set, calling through the record transport,
+   * unrecorded (GRAMMAR.md, "When a scenario ends"). */
   cleanup?(tape: Tape, names: Record<string, string>): unknown;
 }
 

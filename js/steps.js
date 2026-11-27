@@ -672,20 +672,40 @@ export function register(api, { runner = "cucumber", client, identityHeader = "x
     world.pubtest.tape = tape;
     return undefined;
   };
+  // The scenario's end: its tape's (cassette, the scenario's own cleanups, its customers'
+  // cleanups, in that order, before the harness's environment is restored), then its
+  // unread refusal. A passed scenario fails with every problem; a failed one keeps its
+  // own failure, and the problems after it are printed to stderr, as Python warns them.
   const end = async (world, failed) => {
     const ctx = world.pubtest;
-    try {
-      if (ctx.tape) {
-        ctx.tape.failed = failed;
-        const problems = await ctx.tape.end();
-        if (problems.length && !failed) throw new Error(problems.join("\n"));
+    const problems = [];
+    let thrown = null; // a cleanup's own error, thrown as it is when it is all that went wrong
+    const close = async () => {
+      try {
+        await ctx.close();
+      } catch (err) {
+        thrown = err;
+        throw err;
       }
-      if (ctx.refused && !ctx.refusalRead) {
-        throw new Error(`the action was refused, and no step read it: ${ctx.refused.error?.stack ?? ctx.refused.message}`);
+    };
+    if (ctx.tape) {
+      ctx.tape.failed = failed;
+      problems.push(...await ctx.tape.end(close));
+    } else {
+      try {
+        await close();
+      } catch (err) {
+        problems.push(`a cleanup failed: ${err?.stack ?? err?.message ?? err}`);
       }
-    } finally {
-      await ctx.close();
     }
+    if (ctx.refused && !ctx.refusalRead) {
+      problems.unshift(`the action was refused, and no step read it: ${ctx.refused.error?.stack ?? ctx.refused.message}`);
+    } else if (failed) {
+      if (problems.length) console.error(`pubtest: after the scenario failed:\n${problems.join("\n")}`);
+      return;
+    }
+    if (problems.length === 1 && thrown) throw thrown;
+    if (problems.length) throw new Error(problems.join("\n"));
   };
   if (quick) {
     api.BeforeAll(async () => { await session(); });

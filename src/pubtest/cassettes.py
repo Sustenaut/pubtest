@@ -27,6 +27,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import traceback
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -450,23 +451,25 @@ class Tape:
             return []
         return [json.loads(line) for line in self.report.read_text(encoding="utf-8").splitlines() if line.strip()]
 
-    def end(self) -> list[str]:
-        """Close the scenario: undo what begin() did, check or save its cassette,
-        run its customers' cleanups. Returns what fails it."""
+    def end(self, close: Callable[[], Any] | None = None) -> list[str]:
+        """Close the scenario: stop answering from its tape, check or save its
+        cassette, then run `close` (the scenario's own cleanups) and its
+        customers' cleanups while its environment is still set, and only then
+        undo what begin() did to the environment. The cleanups call through the
+        record transport itself, so nothing records or faults them. Returns what
+        fails it: every problem, a failed cleanup's among them."""
         problems: list[str] = []
+        own = self.settings.recording and self.borrowed is None
         try:
             if self._use is not None:
                 self._use.__exit__(None, None, None)
+                self._use = None
             if self._defaults is not None:
                 calls = sys.modules["integrations.calls"]
                 calls.Caller.__init__.__kwdefaults__.clear()
                 calls.Caller.__init__.__kwdefaults__.update(self._defaults)
-            for key, value in self._saved_env.items():
-                if value is None:
-                    os.environ.pop(key, None)
-                else:
-                    os.environ[key] = value
-            if self.settings.recording and self.borrowed is None:
+                self._defaults = None
+            if own:
                 if not self.failed:
                     problems += self._save()
             else:
@@ -474,14 +477,31 @@ class Tape:
             if os.environ.get(PLAN):
                 self._plan(problems)
         finally:
-            if self.settings.recording and self.borrowed is None:
-                for name, customer in self.customers.items():
-                    if name in self.names and hasattr(customer, "cleanup"):
-                        try:
-                            customer.cleanup(self, self.names[name])
-                        except Exception as e:  # noqa: BLE001 - every cleanup runs, and says so
-                            problems.append(f"the test customer {name}'s cleanup failed: {e}")
-            _rmtree(self.work)
+            direct = self.t.use(network() if network is not None else self.t.Network()) if own else None
+            if direct is not None:
+                direct.__enter__()
+            try:
+                if close is not None:
+                    try:
+                        close()
+                    except Exception as e:  # noqa: BLE001 - the customers' cleanups still run
+                        problems.append("a cleanup failed: " + "".join(traceback.format_exception(e)).rstrip())
+                if own:
+                    for name, customer in self.customers.items():
+                        if name in self.names and hasattr(customer, "cleanup"):
+                            try:
+                                customer.cleanup(self, self.names[name])
+                            except Exception as e:  # noqa: BLE001 - every cleanup runs, and says so
+                                problems.append(f"the test customer {name}'s cleanup failed: {e}")
+            finally:
+                if direct is not None:
+                    direct.__exit__(None, None, None)
+                for key, value in self._saved_env.items():
+                    if value is None:
+                        os.environ.pop(key, None)
+                    else:
+                        os.environ[key] = value
+                _rmtree(self.work)
         return problems
 
     def _check(self) -> list[str]:

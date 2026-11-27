@@ -348,33 +348,49 @@ export class Tape {
     return fs.readFileSync(this.report, "utf8").split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l));
   }
 
-  /** Close the scenario: undo what begin() did, check or save its cassette, run its
-   * customers' cleanups. Returns what fails it. */
-  async end() {
+  /** Close the scenario: stop answering from its tape, check or save its cassette, then
+   * run close (the scenario's own cleanups) and its customers' cleanups while its
+   * environment is still set, and only then undo what begin() did to the environment.
+   * The cleanups call through the record transport itself, so nothing records or
+   * faults them. Returns what fails it: every problem, a failed cleanup's among them. */
+  async end(close) {
     const problems = [];
     const own = this.settings.recording && this.borrowed === null;
     try {
       this.restore?.();
-      for (const [k, v] of Object.entries(this.savedEnv)) {
-        if (v === undefined) delete process.env[k];
-        else process.env[k] = v;
-      }
+      this.restore = null;
       if (own) {
         if (!this.failed) problems.push(...this.#save());
       } else problems.push(...this.#check());
       if (process.env[PLAN]) this.#plan(problems);
     } finally {
-      if (own) {
-        for (const [name, customer] of Object.entries(this.customers)) {
-          if (!(name in this.names) || !customer.cleanup) continue;
+      const restore = own ? this.t.use(this.network ?? this.t.LIVE) : null;
+      try {
+        if (close) {
           try {
-            await customer.cleanup(this, this.names[name]);
+            await close();
           } catch (err) {
-            problems.push(`the test customer ${name}'s cleanup failed: ${err?.message ?? err}`);
+            problems.push(`a cleanup failed: ${err?.stack ?? err?.message ?? err}`);
           }
         }
+        if (own) {
+          for (const [name, customer] of Object.entries(this.customers)) {
+            if (!(name in this.names) || !customer.cleanup) continue;
+            try {
+              await customer.cleanup(this, this.names[name]);
+            } catch (err) {
+              problems.push(`the test customer ${name}'s cleanup failed: ${err?.message ?? err}`);
+            }
+          }
+        }
+      } finally {
+        restore?.();
+        for (const [k, v] of Object.entries(this.savedEnv)) {
+          if (v === undefined) delete process.env[k];
+          else process.env[k] = v;
+        }
+        fs.rmSync(this.work, { recursive: true, force: true });
       }
-      fs.rmSync(this.work, { recursive: true, force: true });
     }
     return problems;
   }

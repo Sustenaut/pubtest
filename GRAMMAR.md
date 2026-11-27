@@ -412,7 +412,22 @@ first step that asks for a customer's names (`tape.names_of(name)`; Node
 scenario needs and returns the names it stands for, `{"the repository":
 "real-name"}`; its cleanup runs when the scenario ends, passed or failed. The
 names are kept in the cassette, so replay gives the same ones and runs no
-setup.
+setup, and no cleanup.
+
+**When a scenario ends**, in this order: its calls stop going through its
+cassette (or recorder); its cassette is checked, or, recording, saved when it
+passed; the scenario's own cleanups run (`ctx.cleanup`, in reverse), then, in
+record mode, each customer's cleanup; and only then is the environment the
+harness set for the scenario (`INTEGRATIONS_CASSETTE`, `INTEGRATIONS_CASSETTES`,
+`INTEGRATIONS_CASSETTE_REPORT`, `PYTHONPATH`, `NODE_OPTIONS`) put back, so a
+cleanup's Caller finds `INTEGRATIONS_MODE` with its cassette, as a step's does.
+In record mode the cleanups call through the record transport itself: nothing
+they call is recorded, or meets a fault the scenario's Givens set. Every cleanup
+runs, whether the scenario passed or failed, and one that fails does not stop
+the rest. A scenario that passed fails with all of what went wrong, a failed
+cleanup's among it; one that failed keeps its own failure as the one it
+reports, and what went wrong after it is added, as a warning (Python) or on
+stderr (Node).
 
 **`pubtest record`.** A command in the Python package and the npm package:
 

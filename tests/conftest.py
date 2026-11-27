@@ -281,6 +281,75 @@ def gets(ctx, url):
     ctx.attempt(lambda: Caller("inner", "suite").call("github.repo-ops", "call", Request("GET", url)).json())
 '''
 
+# The same suite with a test customer, inner.watched, whose cleanup, and the cleanup its
+# step gives the scenario, each write to cleanups.txt what they see: the mode, whether
+# INTEGRATIONS_CASSETTE is the one the scenario's step saw, and whether it failed. The
+# customer's cleanup makes a call, as integrations' GitHub customer's does, and its step
+# "the watched customer's cleanup fails" breaks it. After the scenarios, the file says
+# what INTEGRATIONS_CASSETTE is (WATCHED_CONFTEST).
+WATCHED = '''
+
+from pytest_bdd import given
+
+from pubtest import plugin
+
+LOG = Path(__file__).parent.parent / "cleanups.txt"
+
+
+def log(line):
+    with LOG.open("a", encoding="utf-8") as out:
+        out.write(line + "\\n")
+
+
+def sees(tape):
+    cassette = os.environ.get("INTEGRATIONS_CASSETTE")
+    which = "no cassette" if cassette is None else "the scenario's cassette" if cassette == Watched.seen else "another cassette"
+    return f"in {os.environ.get('INTEGRATIONS_MODE')} mode, with {which}, after it {'failed' if tape.failed else 'passed'}"
+
+
+class Watched:
+    name = "inner.watched"
+    seen = None
+    breaks = False
+
+    @staticmethod
+    def setup(tape):
+        return {"the repository": "watched-1"}
+
+    @staticmethod
+    def cleanup(tape, names):
+        url = f"https://api.github.com/repos/o/{names['the repository']}"
+        answer = Caller("inner", "cleanup").call("github.repo-ops", "call", Request("DELETE", url)).json()
+        log(f"the customer's cleanup of {answer['name']}, {sees(tape)}")
+        if Watched.breaks:
+            raise RuntimeError("the watched cleanup broke")
+
+
+# Registered as a pubtest.customers entry point's would be.
+plugin.CUSTOMERS[Watched.name] = Watched
+
+
+@given(phrase('the watched customer\\'s repository "{logical}"'))
+def watched_repository(ctx, logical):
+    Watched.seen, Watched.breaks = os.environ.get("INTEGRATIONS_CASSETTE"), False
+    assert logical in ctx.tape.names_of(Watched.name)
+    ctx.cleanup(lambda: log(f"the scenario's cleanup, {sees(ctx.tape)}"))
+
+
+@given("the watched customer's cleanup fails")
+def watched_cleanup_fails():
+    Watched.breaks = True
+'''
+
+WATCHED_CONFTEST = '''import os
+from pathlib import Path
+
+
+def pytest_sessionfinish(session):
+    with (Path(__file__).parent.parent / "cleanups.txt").open("a", encoding="utf-8") as out:
+        out.write(f"after the scenarios, INTEGRATIONS_CASSETTE is {os.environ.get('INTEGRATIONS_CASSETTE', 'unset')}\\n")
+'''
+
 INNER_CLIENT = '''#!{python}
 import json
 import sys
@@ -298,6 +367,12 @@ HARNESS = ("PUBTEST_RUN", "INTEGRATIONS_MODE", "INTEGRATIONS_CASSETTE", "INTEGRA
 @given(phrase('an inner suite with the feature "{name}":'))
 def inner_suite(ctx, name, docstring):
     _inner_suite(ctx, name, docstring, INNER_SUITE)
+
+
+@given(phrase('an inner suite with a watched test customer and the feature "{name}":'))
+def inner_suite_watched(ctx, name, docstring):
+    _inner_suite(ctx, name, docstring, INNER_SUITE + WATCHED)
+    (ctx.directory / "tests" / "conftest.py").write_text(WATCHED_CONFTEST, encoding="utf-8")
 
 
 @given(phrase('an inner suite on the real network with the feature "{name}":'))
