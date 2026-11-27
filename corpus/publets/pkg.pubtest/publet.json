@@ -2,7 +2,7 @@
   "claims": {
     "identity": {
       "class": "archival",
-      "content": "pubtest 0.4.0 is released as v0.4.0 from commit e6d427d48189f2c6e58db9e3bdc35ba0bb0b4e57.",
+      "content": "pubtest 0.4.1 is released as v0.4.1 from commit e6213b5cdb5d45074c3ba9d40b2152e22a560bb3.",
       "data": {
         "columns": [
           {
@@ -27,25 +27,25 @@
         "rows": [
           [
             "pubtest",
-            "0.4.0",
+            "0.4.1",
             "",
             "",
-            "v0.4.0",
-            "e6d427d48189f2c6e58db9e3bdc35ba0bb0b4e57"
+            "v0.4.1",
+            "e6213b5cdb5d45074c3ba9d40b2152e22a560bb3"
           ]
         ]
       },
-      "scope": "the published release v0.4.0 of pubtest",
+      "scope": "the published release v0.4.1 of pubtest",
       "sources": [
         {
           "ref": "pubtest",
-          "revision": "e6d427d48189f2c6e58db9e3bdc35ba0bb0b4e57"
+          "revision": "e6213b5cdb5d45074c3ba9d40b2152e22a560bb3"
         }
       ]
     },
     "release": {
       "class": "archival",
-      "content": "pubtest 0.4.0 was released on 2026-11-20 from commit e6d427d48189f2c6e58db9e3bdc35ba0bb0b4e57 with these changes.",
+      "content": "pubtest 0.4.1 was released on 2026-11-27 from commit e6213b5cdb5d45074c3ba9d40b2152e22a560bb3 with these changes.",
       "data": {
         "columns": [
           {
@@ -57,28 +57,24 @@
         ],
         "rows": [
           [
-            "changed",
-            "pubtest's Python distribution is pubtestrules, its PyPI name (PyPI's pubtest is another project): the wheel is pubtestrules-X-py3-none-any.whl and is uploaded to PyPI as well as attached to the release; `import pubtest`, the pubtest command and the pytest plugin keep their names"
-          ],
-          [
-            "removed",
-            "the pubtest[integrations] extra: PyPI takes no dependency by URL, and the harness needs only integrations installed, which a recording suite pins itself"
+            "fixed",
+            "A test customer's cleanup, and the scenario's own cleanups, run after the cassette is saved and before the harness puts the scenario's environment back, so a Caller in a cleanup finds INTEGRATIONS_CASSETTE (0.3.0 ran them after, and integrations' GitHub customer failed every recorded scenario with \"INTEGRATIONS_MODE=record needs INTEGRATIONS_CASSETTE\", leaving its repositories); in record mode they call through the record transport, unrecorded and unfaulted; a cleanup that fails after a failed scenario is reported beside its failure (a warning in Python, stderr in Node), no longer dropped in Node"
           ]
         ]
       },
       "depends": [
         "#identity"
       ],
-      "scope": "the published release v0.4.0 of pubtest",
+      "scope": "the published release v0.4.1 of pubtest",
       "sources": [
         {
           "ref": "pubtest",
-          "revision": "e6d427d48189f2c6e58db9e3bdc35ba0bb0b4e57"
+          "revision": "e6213b5cdb5d45074c3ba9d40b2152e22a560bb3"
         }
       ]
     }
   },
-  "created": "2026-11-20T00:00:00Z",
+  "created": "2026-11-27T00:00:00Z",
   "sections": [
     {
       "heading": "Identity",
