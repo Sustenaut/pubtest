@@ -1,0 +1,4 @@
+{
+  "category": "internal",
+  "change": "pubtest's own tests no longer depend on integrations: the record/replay harness's end-to-end scenarios (recording.feature, integrations.feature) moved to integrations' suite, where they run under pytest-bdd and cucumber-js; harness-off.feature checks the steps say how to turn the harness on; README says how a harness change is proven there before release"
+}

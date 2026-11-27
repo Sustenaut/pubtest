@@ -126,8 +126,8 @@ export function startSession(found) {
 }
 
 /** The warning a recording gives when it records the real network into pubrules.json's
- * "DIR": that form is for a suite whose record transport is a stand-in (pubtest's own),
- * since the repository is no place for what real services answered. */
+ * "DIR": that form is for a suite whose record transport is a stand-in (the harness
+ * scenarios' inner suites), since the repository is no place for what real services answered. */
 export function standInOnly(found, realNetwork) {
   if (!(found.active && found.recording && found.named && realNetwork)) return null;
   return `pubtest record: warning: ${found.cassettes} is pubrules.json's "cassettes": "DIR", which is only for a suite whose record transport is a stand-in; this one records the real network, whose answers belong in the private data repository ("pubtest": {"cassettes": true})`;

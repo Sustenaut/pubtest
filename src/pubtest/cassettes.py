@@ -184,8 +184,8 @@ def settings(root: Path | None = None, env: dict[str, str] | None = None) -> Set
 def stand_in_only(found: Settings, real_network: bool) -> str | None:
     """The warning a recording gives when it records the real network into
     pubrules.json's "DIR": that form is for a suite whose record transport is a
-    stand-in (pubtest's own), since the repository is no place for what real
-    services answered."""
+    stand-in (the harness scenarios' inner suites), since the repository is no
+    place for what real services answered."""
     if not (found.active and found.recording and found.named and real_network):
         return None
     return (f'pubtest record: warning: {found.cassettes} is pubrules.json\'s "cassettes": "DIR", which is only '

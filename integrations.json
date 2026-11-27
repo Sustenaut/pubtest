@@ -30,9 +30,7 @@
         ".github/workflows/wheel.yml",
         "scripts/go-live.sh",
         "js/cli.js",
-        "src/pubtest/cli.py",
-        "test/suite.js",
-        "tests/conftest.py"
+        "src/pubtest/cli.py"
       ],
       "mode": "required"
     },
@@ -48,10 +46,6 @@
     {
       "path": "corpus/**",
       "reason": "Release records, not code"
-    },
-    {
-      "path": "tests/cassettes/**",
-      "reason": "Recorded answers the suite replays, not code"
     }
   ]
 }

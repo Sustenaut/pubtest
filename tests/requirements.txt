@@ -3,6 +3,3 @@
 -r requirements-pubrules.txt
 coverage==7.16.2
 pyyaml==6.0.3
-# The record/replay harness's transports, for pubtest's own suite only: pubtest
-# itself never depends on integrations (integrations' suite uses pubtest).
-integrations @ https://github.com/Sustenaut/integrations/releases/download/v0.16.0/integrations-0.16.0-py3-none-any.whl

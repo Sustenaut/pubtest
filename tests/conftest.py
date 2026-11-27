@@ -7,15 +7,13 @@ import json
 import os
 import sys
 import urllib.request
-from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import parse_qs
 
 import pytest
-from pytest_bdd import given, parsers, then, when
+from pytest_bdd import parsers, then, when
 
 import pubtest.http
-from pubtest import cassettes
 from pubtest.steps import phrase
 
 os.environ.setdefault("GREET_BIN_DIR", str(Path(__file__).parent / "bin"))
@@ -86,7 +84,6 @@ def describe_release(ctx):
 
 def main(argv):
     """A command-line main, called in-process, as pubrules-style suites call theirs."""
-    import sys  # noqa: PLC0415
     if argv and argv[0].startswith("--"):
         print("usage: main [NAME]", file=sys.stderr)
         print(f"no such option: {argv[0]}", file=sys.stderr)
@@ -216,197 +213,7 @@ def suite_refused(inner, text):
     assert inner.ret == pytest.ExitCode.USAGE_ERROR and text in said, said
 
 
-# --- calls to outside services (integrations.feature, recording.feature) ---------
-
-os.environ.setdefault("PUBTEST_BIN_DIR", str(Path(sys.executable).parent))
-
-
-class ExampleNetwork:
-    """What record mode records through in pubtest's own suite: GitHub's shape of
-    answer, {"name": the URL's last part, "updated_at": now}, never the network."""
-
-    def send(self, request, timeout):
-        from integrations.calls import Response  # noqa: PLC0415
-        body = {"name": request.url.rstrip("/").rsplit("/", 1)[-1],
-                "updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
-        return Response(200, json.dumps(body).encode(), headers={"Content-Type": "application/json"})
-
-
-cassettes.network = ExampleNetwork
-
-
-def example_get(url):
-    from integrations.calls import Caller, Request  # noqa: PLC0415
-    return Caller("pubtest", "suite").call("github.repo-ops", "call", Request("GET", url)).json()
-
-
-@when(phrase('the example client gets "{url}"'))
-def example_client_gets(ctx, url):
-    ctx.attempt(lambda: example_get(url))
-
-
-@when(phrase('the example client gets the repository "{logical}"'))
-def example_client_gets_repository(ctx, logical):
-    real = ctx.tape.names_of("pubtest.example")[logical]
-    ctx.attempt(lambda: example_get(f"https://api.github.com/repos/pubtest-example/{real}"))
-
-
-INNER_SUITE = '''import json
-import os
-from datetime import datetime, timezone
-from pathlib import Path
-
-from integrations.calls import Caller, Request, Response
-from pytest_bdd import scenarios, when
-
-from pubtest import cassettes
-from pubtest.steps import phrase
-
-scenarios(".")
-os.environ["PATH"] = str(Path(__file__).parent.parent / "bin") + os.pathsep + os.environ["PATH"]
-
-
-class Network:
-    def send(self, request, timeout):
-        body = {"name": request.url.rstrip("/").rsplit("/", 1)[-1],
-                "updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
-        return Response(200, json.dumps(body).encode(), headers={"Content-Type": "application/json"})
-
-
-cassettes.network = Network
-
-
-@when(phrase('the inner client gets "{url}"'))
-def gets(ctx, url):
-    ctx.attempt(lambda: Caller("inner", "suite").call("github.repo-ops", "call", Request("GET", url)).json())
-'''
-
-# The same suite with a test customer, inner.watched, whose cleanup, and the cleanup its
-# step gives the scenario, each write to cleanups.txt what they see: the mode, whether
-# INTEGRATIONS_CASSETTE is the one the scenario's step saw, and whether it failed. The
-# customer's cleanup makes a call, as integrations' GitHub customer's does, and its step
-# "the watched customer's cleanup fails" breaks it. After the scenarios, the file says
-# what INTEGRATIONS_CASSETTE is (WATCHED_CONFTEST).
-WATCHED = '''
-
-from pytest_bdd import given
-
-from pubtest import plugin
-
-LOG = Path(__file__).parent.parent / "cleanups.txt"
-
-
-def log(line):
-    with LOG.open("a", encoding="utf-8") as out:
-        out.write(line + "\\n")
-
-
-def sees(tape):
-    cassette = os.environ.get("INTEGRATIONS_CASSETTE")
-    which = "no cassette" if cassette is None else "the scenario's cassette" if cassette == Watched.seen else "another cassette"
-    return f"in {os.environ.get('INTEGRATIONS_MODE')} mode, with {which}, after it {'failed' if tape.failed else 'passed'}"
-
-
-class Watched:
-    name = "inner.watched"
-    seen = None
-    breaks = False
-
-    @staticmethod
-    def setup(tape):
-        return {"the repository": "watched-1"}
-
-    @staticmethod
-    def cleanup(tape, names):
-        url = f"https://api.github.com/repos/o/{names['the repository']}"
-        answer = Caller("inner", "cleanup").call("github.repo-ops", "call", Request("DELETE", url)).json()
-        log(f"the customer's cleanup of {answer['name']}, {sees(tape)}")
-        if Watched.breaks:
-            raise RuntimeError("the watched cleanup broke")
-
-
-# Registered as a pubtest.customers entry point's would be.
-plugin.CUSTOMERS[Watched.name] = Watched
-
-
-@given(phrase('the watched customer\\'s repository "{logical}"'))
-def watched_repository(ctx, logical):
-    Watched.seen, Watched.breaks = os.environ.get("INTEGRATIONS_CASSETTE"), False
-    assert logical in ctx.tape.names_of(Watched.name)
-    ctx.cleanup(lambda: log(f"the scenario's cleanup, {sees(ctx.tape)}"))
-
-
-@given("the watched customer's cleanup fails")
-def watched_cleanup_fails():
-    Watched.breaks = True
-'''
-
-WATCHED_CONFTEST = '''import os
-from pathlib import Path
-
-
-def pytest_sessionfinish(session):
-    with (Path(__file__).parent.parent / "cleanups.txt").open("a", encoding="utf-8") as out:
-        out.write(f"after the scenarios, INTEGRATIONS_CASSETTE is {os.environ.get('INTEGRATIONS_CASSETTE', 'unset')}\\n")
-'''
-
-INNER_CLIENT = '''#!{python}
-import json
-import sys
-
-from integrations.calls import Caller, Request
-
-print(json.dumps(Caller("inner", "program").call("github.repo-ops", "call", Request("GET", sys.argv[1])).json()))
-'''
-
-# What a harness sets for the programs it runs, which an inner suite must not inherit.
-HARNESS = ("PUBTEST_RUN", "INTEGRATIONS_MODE", "INTEGRATIONS_CASSETTE", "INTEGRATIONS_CASSETTES",
-           "INTEGRATIONS_CASSETTE_REPORT", "PUBTEST_ONLY", "PUBTEST_PLAN", "PUBTEST_RECORD", "PUBTEST_CASSETTES")
-
-
-@given(phrase('an inner suite with the feature "{name}":'))
-def inner_suite(ctx, name, docstring):
-    _inner_suite(ctx, name, docstring, INNER_SUITE)
-
-
-@given(phrase('an inner suite with a watched test customer and the feature "{name}":'))
-def inner_suite_watched(ctx, name, docstring):
-    _inner_suite(ctx, name, docstring, INNER_SUITE + WATCHED)
-    (ctx.directory / "tests" / "conftest.py").write_text(WATCHED_CONFTEST, encoding="utf-8")
-
-
-@given(phrase('an inner suite on the real network with the feature "{name}":'))
-def inner_suite_real(ctx, name, docstring):
-    _inner_suite(ctx, name, docstring, INNER_SUITE.replace("cassettes.network = Network\n", ""))
-
-
-def _inner_suite(ctx, name, docstring, suite):
-    root = ctx.directory
-    (root / "features").mkdir(exist_ok=True)
-    (root / "features" / name).write_text(docstring + "\n", encoding="utf-8")
-    (root / "tests").mkdir(exist_ok=True)
-    (root / "tests" / "pytest.ini").write_text(
-        "[pytest]\nbdd_features_base_dir = ../features/\naddopts = -p no:pubrules -p no:cacheprovider\n", encoding="utf-8")
-    (root / "tests" / "test_inner.py").write_text(suite, encoding="utf-8")
-    (root / "bin").mkdir(exist_ok=True)
-    client = root / "bin" / "inner-client"
-    client.write_text(INNER_CLIENT.replace("{python}", sys.executable), encoding="utf-8")
-    client.chmod(0o755)
-
-
-@when("the inner suite runs")
-def inner_suite_runs(ctx):
-    import subprocess  # noqa: PLC0415
-    from pubtest.core import Result  # noqa: PLC0415
-    env = {k: v for k, v in os.environ.items() if k not in HARNESS}
-    ctx.acting()
-    argv = [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider"]
-    done = subprocess.run(argv, cwd=ctx.directory / "tests", env=env, capture_output=True, text=True, check=False,
-                          timeout=300)
-    ctx.ran(Result(code=done.returncode, stdout=done.stdout, stderr=done.stderr, argv=argv))
-
-
-@then(phrase('the inner run says "{text}"'))
-def inner_run_says(ctx, text):
-    said = ctx.outcome.stdout + ctx.outcome.stderr
-    assert text in said, said
+@when(phrase('I put a fault on "{name}" without the harness'))
+def fault_without_harness(ctx, name):
+    from pubtest.steps.integrations import cant_be_reached  # noqa: PLC0415
+    ctx.attempt(lambda: cant_be_reached(ctx, name))

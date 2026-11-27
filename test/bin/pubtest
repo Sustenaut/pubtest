@@ -1,3 +1,0 @@
-#!/bin/sh
-# The npm package's pubtest command, as `npx pubtest` runs it, for recording.feature.
-exec node "$(dirname "$0")/../../js/cli.js" "$@"

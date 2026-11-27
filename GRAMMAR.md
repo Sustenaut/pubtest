@@ -331,10 +331,11 @@ the repository turns it on in pubrules.json:
 `true` keeps cassettes in the data repository, `../<repo>-data/` beside the
 repository, private, under `integrations/cassettes/`; a path, such as
 `"tests/cassettes"`, keeps them in the repository itself. That form is only for
-a suite whose record transport is a stand-in, as pubtest's own suite's is: what
-real services answered belongs in the private data repository, and a recording
-through the real network into a directory pubrules.json names warns that it
-does. `PUBTEST_CASSETTES=1`
+a suite whose record transport is a stand-in, as the harness's own scenarios'
+inner suites (in integrations' suite) are: what real services answered
+belongs in the private data repository, and a recording through the real
+network into a directory pubrules.json names warns that it does.
+`PUBTEST_CASSETTES=1`
 turns it on whatever pubrules.json says, and `0` off. Off, nothing here
 happens, and the steps above fail saying so.
 
