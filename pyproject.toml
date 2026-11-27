@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 # The distribution is pubtestrules (PyPI's "pubtest" is another project); the
 # package imported, the command and the pytest plugin are pubtest.
 name = "pubtestrules"
-version = "0.4.0"
+version = "0.4.1"
 description = "The Gherkin steps every Sustenaut suite shares, as a pytest-bdd plugin (and, from the same grammar, an npm package)."
 readme = "README.md"
 license = "Apache-2.0"

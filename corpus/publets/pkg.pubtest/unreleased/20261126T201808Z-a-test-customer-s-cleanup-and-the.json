@@ -1,4 +1,0 @@
-{
-  "category": "fixed",
-  "change": "A test customer's cleanup, and the scenario's own cleanups, run after the cassette is saved and before the harness puts the scenario's environment back, so a Caller in a cleanup finds INTEGRATIONS_CASSETTE (0.3.0 ran them after, and integrations' GitHub customer failed every recorded scenario with \"INTEGRATIONS_MODE=record needs INTEGRATIONS_CASSETTE\", leaving its repositories); in record mode they call through the record transport, unrecorded and unfaulted; a cleanup that fails after a failed scenario is reported beside its failure (a warning in Python, stderr in Node), no longer dropped in Node"
-}
